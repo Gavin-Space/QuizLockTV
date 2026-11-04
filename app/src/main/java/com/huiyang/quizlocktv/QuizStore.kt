@@ -14,6 +14,7 @@ object QuizStore {
     private const val KEY_INTERVAL = "interval_min"    // 弹窗间隔(分钟)
     private const val KEY_URL = "sync_url"             // 入口B：自动同步地址
     private const val KEY_LAST_SYNC = "last_sync"      // 上次同步成功时间戳
+    private const val KEY_STREAK = "required_streak"   // 需连续答对几题才解锁（防乱点）
 
     private var cache: List<Question>? = null
 
@@ -66,4 +67,10 @@ object QuizStore {
         sp(c).edit().putLong(KEY_LAST_SYNC, t).apply()
     }
     fun getLastSync(c: Context): Long = sp(c).getLong(KEY_LAST_SYNC, 0L)
+
+    /** 解锁所需连续答对题数，默认 3，可设 1~10。设越大越难靠蒙混过关。 */
+    fun setStreak(c: Context, n: Int) {
+        sp(c).edit().putInt(KEY_STREAK, n.coerceIn(1, 10)).apply()
+    }
+    fun getStreak(c: Context): Int = sp(c).getInt(KEY_STREAK, 3)
 }

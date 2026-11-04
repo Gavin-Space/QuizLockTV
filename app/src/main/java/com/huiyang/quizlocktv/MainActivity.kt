@@ -24,6 +24,7 @@ class MainActivity : Activity() {
 
     private lateinit var statusView: TextView
     private lateinit var intervalLabel: TextView
+    private lateinit var streakLabel: TextView
     private lateinit var pasteInput: EditText
     private lateinit var urlInput: EditText
 
@@ -67,6 +68,16 @@ class MainActivity : Activity() {
         row.addView(btn("+1", 1f) { bumpInterval(1) })
         row.addView(btn("设为10", 1.5f) { setInterval(10) })
         col.addView(row)
+
+        // 防乱点：需连续答对几题才解锁
+        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+        rowS.addView(streakLabel)
+        rowS.addView(btn("+1", 1f) { bumpStreak(1) })
+        rowS.addView(btn("设为3", 1.5f) { setStreak(3) })
+        col.addView(rowS)
 
         // 入口A
         col.addView(subhead("【入口A】粘贴导入题库 JSON："))
@@ -121,6 +132,16 @@ class MainActivity : Activity() {
         refreshStatus()
     }
 
+    private fun bumpStreak(delta: Int) {
+        setStreak((QuizStore.getStreak(this) + delta).coerceIn(1, 10))
+    }
+
+    private fun setStreak(v: Int) {
+        QuizStore.setStreak(this, v)
+        streakLabel.text = v.toString()
+        refreshStatus()
+    }
+
     private fun importFromPaste() {
         val text = pasteInput.text.toString()
         if (text.isBlank()) { Toast.makeText(this, "请先粘贴内容", Toast.LENGTH_SHORT).show(); return }
@@ -157,7 +178,7 @@ class MainActivity : Activity() {
         val last = QuizStore.getLastSync(this)
         val lastStr = if (last == 0L) "从未同步"
         else "上次同步 ${android.text.format.DateFormat.getDateFormat(this).format(java.util.Date(last))}"
-        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　$lastStr"
+        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　连对 ${QuizStore.getStreak(this)} 题解锁　|　$lastStr"
     }
 
     // ---- 小工具 ----
