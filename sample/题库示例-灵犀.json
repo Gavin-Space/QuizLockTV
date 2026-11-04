@@ -1,0 +1,10 @@
+{
+  "questions": [
+    {"type": "single", "stem": "下列函数中，在区间 (0,+∞) 上为减函数的是？", "options": ["y = x²", "y = 2x", "y = 1/x", "y = √x"], "answer": 2, "analysis": "y=1/x 在 (0,+∞) 单调递减；x²、2x、√x 均递增。"},
+    {"type": "single", "stem": "已知集合 A={x | x²-3x+2=0}，则 A 中元素个数为？", "options": ["0", "1", "2", "3"], "answer": 2, "analysis": "x²-3x+2=0 解为 x=1 或 x=2，共 2 个元素。"},
+    {"type": "single", "stem": "函数 f(x)=√(x-1) 的定义域是？", "options": ["[1,+∞)", "(1,+∞)", "(-∞,1]", "R"], "answer": 0, "analysis": "需 x-1≥0，故 x≥1，定义域 [1,+∞)。"},
+    {"type": "judge", "stem": "任意两个奇数的和一定是偶数。", "answer": true, "analysis": "(2m+1)+(2n+1)=2(m+n+1)，是偶数。"},
+    {"type": "judge", "stem": "0 是自然数。", "answer": true, "analysis": "现行教材规定 0∈N。"},
+    {"type": "judge", "stem": "若 a>b，则 1/a 一定小于 1/b。", "answer": false, "analysis": "反例 a=1,b=-1，1/a=1>1/b=-1，需同号才成立。"}
+  ]
+}
