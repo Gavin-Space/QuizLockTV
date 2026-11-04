@@ -88,7 +88,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.parseColor("#6B7A93"))
             setBackgroundColor(Color.parseColor("#16243B"))
-            setText(QuizStore.getSyncUrl(this))
+            setText(QuizStore.getSyncUrl(this@MainActivity))
         }
         col.addView(urlInput)
         val rowB = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
