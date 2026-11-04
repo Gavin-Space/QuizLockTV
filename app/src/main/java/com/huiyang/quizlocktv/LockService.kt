@@ -17,9 +17,19 @@ import android.os.IBinder
  */
 class LockService : Service() {
 
+    private var controlServer: ControlServer? = null
+
     override fun onCreate() {
         super.onCreate()
         startAsForeground()
+        // 启动内置局域网控制服务器：同一 WiFi 下手机/电脑可远程放题与弹窗
+        controlServer = ControlServer(applicationContext).also { it.start() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { controlServer?.stop() }
+        controlServer = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -53,6 +53,19 @@ class MainActivity : Activity() {
         }
 
         col.addView(header("答题锁 TV"))
+
+        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+        col.addView(TextView(this).apply {
+            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+            textSize = 16f
+            setTextColor(Color.parseColor("#1f6feb"))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#0B2A4A"))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+
         statusView = TextView(this).apply {
             textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
             setPadding(0, dp(6), 0, dp(16))
