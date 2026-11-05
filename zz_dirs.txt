@@ -1,5 +1,0 @@
-.github
-app
-logs
-preview_out
-sample

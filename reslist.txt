@@ -1,8 +1,0 @@
-
-FullName                                                                                      Length LastWriteTime
---------                                                                                      ------ -------------
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\drawable\ic_launcher.xml    404 2026/11/4 17:36:01
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\colors.xml           348 2026/11/4 17:36:01
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\strings.xml           75 2026/11/4 17:36:01
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\themes.xml           758 2026/11/4 17:36:01
-

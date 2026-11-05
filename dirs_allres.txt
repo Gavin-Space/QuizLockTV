@@ -1,6 +1,0 @@
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\drawable
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\drawable\ic_launcher.xml
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\colors.xml
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\strings.xml
-D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\themes.xml

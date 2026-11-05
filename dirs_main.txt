@@ -1,5 +1,0 @@
-AndroidManifest.xml
-assets
-java
-res
-res_v1_bak

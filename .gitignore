@@ -1,0 +1,41 @@
+# 构建产物
+*.iml
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 备份目录（含同包同名类，不能进源码树）
+*_v1_bak/
+*.bak
+*.preui
+*.orig
+
+# 工作过程临时/转储文件（非项目源码）
+*.txt
+*.tmp
+*.log
+*.patch
+_*.txt
+_*
+tmp_*
+*.kt.txt
+*.xml.txt
+logs/
+preview_out/
+scratch_*
+.codex*
+.codex-review/
+.dump*
+zz_*
+za_*
+cs_view.txt
+activity_dump.txt
+
+# IDE
+.idea/
+.vscode/
+*.jks
+*.keystore
