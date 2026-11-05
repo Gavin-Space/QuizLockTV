@@ -1,0 +1,10 @@
+diff --git a/app/src/main/java/com/huiyang/quizlocktv/QuizLockActivity.kt b/app/src/main/java/com/huiyang/quizlocktv/QuizLockActivity.kt
+index 5524472..a239249 100644
+--- a/app/src/main/java/com/huiyang/quizlocktv/QuizLockActivity.kt
++++ b/app/src/main/java/com/huiyang/quizlocktv/QuizLockActivity.kt
+@@ -200,3 +200,5 @@ class QuizLockActivity : Activity() {
+ 
+     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+ }
++
++

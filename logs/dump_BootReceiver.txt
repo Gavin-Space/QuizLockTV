@@ -1,0 +1,29 @@
+   1: package com.huiyang.quizlocktv
+   2: 
+   3: import android.content.BroadcastReceiver
+   4: import android.content.Context
+   5: import android.content.Intent
+   6: import android.os.Build
+   7: 
+   8: /**
+   9:  * 开机完成：启动前台服务（负责安排每 N 分钟弹窗），并立即弹"开机首题"。
+  10:  */
+  11: class BootReceiver : BroadcastReceiver() {
+  12:     override fun onReceive(ctx: Context, intent: Intent) {
+  13:         val svc = Intent(ctx, LockService::class.java)
+  14:         try {
+  15:             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+  16:                 ctx.startForegroundService(svc)
+  17:             } else {
+  18:                 ctx.startService(svc)
+  19:             }
+  20:         } catch (e: Exception) { /* 个别 ROM 限制，忽略 */ }
+  21: 
+  22:         // 开机先做一道题：从后台拉起锁屏页
+  23:         val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+  24:             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+  25:             putExtra(QuizLockActivity.EXTRA_FIRST, true)
+  26:         }
+  27:         try { ctx.startActivity(lock) } catch (e: Exception) {}
+  28:     }
+  29: }

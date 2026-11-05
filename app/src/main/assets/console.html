@@ -6,107 +6,179 @@
 <title>答题锁 TV · 手机控制台</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#0B1220;color:#E6EFFF;padding:16px;padding-bottom:40px}
-  h1{font-size:19px;color:#2BB673;margin-bottom:4px}
-  .sub{font-size:12px;color:#9FB0CC;margin-bottom:16px}
-  .card{background:#16243B;border-radius:14px;padding:16px;margin-bottom:14px}
-  .card h2{font-size:15px;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-  .stat{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:#9FB0CC}
-  .stat b{color:#2BB673;font-size:17px}
-  textarea{width:100%;height:140px;background:#0B1220;color:#E6EFFF;border:1px solid #2a3a55;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;resize:vertical}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}
-  .stepper{display:flex;align-items:center;gap:10px;background:#0B1220;border-radius:10px;padding:6px 12px}
-  .stepper button{width:34px;height:34px;font-size:20px;border:none;border-radius:8px;background:#2a3a55;color:#fff}
-  .stepper span{min-width:34px;text-align:center;font-size:18px;color:#fff;font-weight:bold}
-  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:16px;color:#fff;background:#0F8A4F;margin-top:8px;font-weight:bold}
-  .btn.blue{background:#1f6feb}
-  .btn:active{opacity:.8}
-  .msg{font-size:13px;margin-top:8px;min-height:18px}
-  .msg.ok{color:#2BB673}.msg.err{color:#FF5B5B}
-  .tip{font-size:11px;color:#6B7A93;margin-top:6px;line-height:1.5}
+  :root{
+    --bg:#070c16; --card:rgba(22,36,59,.72); --line:rgba(120,160,220,.16);
+    --txt:#EAF2FF; --sub:#8FA3C2; --green:#27D67B; --greenD:#0F8A4F;
+    --blue:#3B82F6; --red:#FF5B5B; --amber:#FFB020;
+  }
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,rgba(39,214,123,.12),transparent),
+               radial-gradient(900px 500px at -10% 10%,rgba(59,130,246,.12),transparent),var(--bg);
+    color:var(--txt);min-height:100vh;padding:16px 14px 48px;
+  }
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--greenD));
+        display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 6px 18px rgba(39,214,123,.35)}
+  h1{font-size:19px;font-weight:800}
+  .conn{font-size:12px;margin:2px 0 16px;display:flex;align-items:center;gap:6px;color:var(--sub)}
+  .dot{width:8px;height:8px;border-radius:50%;background:#666}
+  .dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(39,214,123,.18)}
+  .dot.off{background:var(--red)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;
+        backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .card h2{font-size:14px;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px;font-weight:700}
+  .card h2 .ico{font-size:17px}
+  .stats{display:flex;gap:10px}
+  .stat{flex:1;text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:12px 6px}
+  .stat .num{font-size:24px;font-weight:800;color:var(--green)}
+  .stat .lbl{font-size:11px;color:var(--sub);margin-top:4px}
+  .btn{width:100%;padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:800;color:#fff;margin-top:6px;
+       transition:transform .08s,opacity .2s}
+  .btn:active{transform:scale(.97);opacity:.85}
+  .btn.green{background:linear-gradient(135deg,var(--green),var(--greenD));box-shadow:0 8px 22px rgba(39,214,123,.3)}
+  .btn.blue{background:linear-gradient(135deg,#4f8cff,var(--blue));box-shadow:0 8px 22px rgba(59,130,246,.3)}
+  .btn.ghost{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt);font-weight:600}
+  textarea{width:100%;min-height:150px;background:rgba(0,0,0,.25);color:var(--txt);border:1px solid var(--line);
+           border-radius:12px;padding:12px;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+  textarea:focus{outline:none;border-color:var(--green)}
+  .stepper{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.2);
+           border:1px solid var(--line);border-radius:14px;padding:8px 10px}
+  .stepper .st-l{font-size:14px;color:var(--txt);flex:1}
+  .stepper .st-l small{display:block;color:var(--sub);font-size:11px;margin-top:2px}
+  .ctrl{display:flex;align-items:center;gap:14px}
+  .ctrl button{width:38px;height:38px;font-size:22px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.08);color:#fff}
+  .ctrl button:active{background:var(--green)}
+  .ctrl span{min-width:40px;text-align:center;font-size:22px;font-weight:800;color:#fff}
+  .dots{display:flex;gap:6px;justify-content:center;margin:14px 0 4px}
+  .dots i{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.15);transition:.3s}
+  .dots i.done{background:var(--green)}
+  .msg{font-size:13px;margin-top:12px;min-height:18px;text-align:center;font-weight:600;opacity:0;transition:opacity .25s}
+  .msg.show{opacity:1}
+  .msg.ok{color:var(--green)}.msg.err{color:var(--red)}.msg.info{color:var(--amber)}
+  .tip{font-size:11px;color:var(--sub);margin-top:10px;line-height:1.6;text-align:center}
+  .empty{font-size:13px;color:var(--amber);text-align:center;padding:6px 0 2px}
 </style>
 </head>
 <body>
-  <h1>🔒 答题锁 TV · 手机控制台</h1>
-  <div class="sub" id="ipInfo">连接到电视…</div>
-
-  <div class="card">
-    <h2>📊 当前状态</h2>
-    <div class="stat" id="status">加载中…</div>
-    <div class="row" style="margin-top:12px">
-      <button class="btn blue" style="margin-top:0" onclick="popupNow()">⚡ 立即弹一道题锁屏</button>
+  <div class="top">
+    <div class="logo">🔒</div>
+    <div>
+      <h1>答题锁 TV</h1>
+      <div class="conn"><span class="dot" id="dot"></span><span id="ipInfo">连接到电视…</span></div>
     </div>
   </div>
 
+  <!-- 控制 -->
   <div class="card">
-    <h2>⏱ 弹窗间隔（分钟）</h2>
-    <div class="stepper">
-      <button onclick="step('interval',-1)">−</button>
-      <span id="intervalVal">10</span>
-      <button onclick="step('interval',1)">＋</button>
+    <h2><span class="ico">⚡</span>实时控制</h2>
+    <button class="btn blue" onclick="popupNow()">立即弹一道题锁屏</button>
+  </div>
+
+  <!-- 状态 -->
+  <div class="card">
+    <h2><span class="ico">📊</span>电视当前状态</h2>
+    <div class="stats">
+      <div class="stat"><div class="num" id="sCount">-</div><div class="lbl">题库题目</div></div>
+      <div class="stat"><div class="num" id="sInterval">-</div><div class="lbl">弹窗间隔(分)</div></div>
+      <div class="stat"><div class="num" id="sStreak">-</div><div class="lbl">连对解锁(题)</div></div>
     </div>
-    <h2 style="margin-top:16px">✅ 需连续答对几题解锁</h2>
-    <div class="stepper">
-      <button onclick="step('streak',-1)">−</button>
-      <span id="streakVal">3</span>
-      <button onclick="step('streak',1)">＋</button>
+    <div id="bankWarn"></div>
+  </div>
+
+  <!-- 配置 -->
+  <div class="card">
+    <h2><span class="ico">⚙️</span>规则设置</h2>
+    <div class="stepper" style="margin-bottom:10px">
+      <div class="st-l">弹窗间隔<small>每隔几分钟弹一题</small></div>
+      <div class="ctrl">
+        <button onclick="step('interval',-1)">−</button>
+        <span id="intervalVal">10</span>
+        <button onclick="step('interval',1)">＋</button>
+      </div>
     </div>
-    <div class="tip">调大"连对题数"更难靠乱点蒙混过关。</div>
-    <button class="btn" onclick="saveConfig()">保存配置到电视</button>
+    <div class="stepper">
+      <div class="st-l">需连对题数<small>越大越难乱点蒙混</small></div>
+      <div class="ctrl">
+        <button onclick="step('streak',-1)">−</button>
+        <span id="streakVal">3</span>
+        <button onclick="step('streak',1)">＋</button>
+      </div>
+    </div>
+    <div class="dots" id="dots"></div>
+    <button class="btn green" onclick="saveConfig()">保存配置到电视</button>
     <div class="msg" id="cfgMsg"></div>
   </div>
 
+  <!-- 题库 -->
   <div class="card">
-    <h2>📥 更新题库（粘贴 AI 生成的 JSON）</h2>
-    <textarea id="bankInput" placeholder='把 WorkBuddy/AI 生成的题库 JSON 粘贴到这里，格式：
+    <h2><span class="ico">📥</span>更新题库</h2>
+    <textarea id="bankInput" placeholder='把 WorkBuddy / 任意 AI 生成的题库 JSON 粘贴到这里，格式：
 {"questions":[
- {"type":"single","stem":"题干","options":["A","B","C","D"],"answer":0,"analysis":"解析"},
+ {"type":"single","stem":"题干","options":["A","B","C","D"],"answer":1,"analysis":"解析"},
  {"type":"judge","stem":"题干","answer":true,"analysis":"解析"}
 ]}'></textarea>
-    <button class="btn" onclick="pushBank()">📤 立即推送到电视（覆盖旧题库）</button>
+    <button class="btn green" onclick="pushBank()">推送到电视（覆盖旧题库）</button>
+    <button class="btn ghost" onclick="formatBank()">格式化 / 校验</button>
     <div class="msg" id="bankMsg"></div>
-    <div class="tip">推送后电视端会重新解析入库，下一次弹窗即用新题。格式有误会提示失败、不会破坏原题库。</div>
+    <div class="tip">推送后电视端重新解析入库，下一次弹窗即用新题；格式有误会提示失败、不会破坏原题库。</div>
   </div>
 
 <script>
-let cur = {interval:10, streak:3};
-const H = {}; // headers
+let cur={interval:10, streak:3};
+
+function renderDots(n){const d=document.getElementById('dots');d.innerHTML='';for(let i=0;i<Math.min(n,10);i++){const s=document.createElement('i');s.className='done';d.appendChild(s);}}
 
 function refresh(){
   fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(d=>{
     cur.interval=d.interval; cur.streak=d.streak;
     document.getElementById('intervalVal').textContent=d.interval;
     document.getElementById('streakVal').textContent=d.streak;
-    document.getElementById('status').innerHTML=
-      '<div>题库 <b>'+d.count+'</b> 题</div>'+
-      '<div>间隔 <b>'+d.interval+'</b> 分钟</div>'+
-      '<div>连对 <b>'+d.streak+'</b> 题</div>';
+    document.getElementById('sCount').textContent=d.count;
+    document.getElementById('sInterval').textContent=d.interval;
+    document.getElementById('sStreak').textContent=d.streak;
+    renderDots(d.streak);
+    document.getElementById('dot').className='dot on';
     document.getElementById('ipInfo').textContent='已连接电视 '+d.ip+':'+d.port;
-  }).catch(e=>{
-    document.getElementById('ipInfo').textContent='连接失败，请确认手机与电视在同一WiFi';
+    document.getElementById('bankWarn').innerHTML = d.hasBank? '' : '<div class="empty">⚠️ 电视还没有题库，请先在下方推送</div>';
+  }).catch(()=>{
+    document.getElementById('dot').className='dot off';
+    document.getElementById('ipInfo').textContent='连接失败：请确认手机与电视在同一 WiFi';
   });
 }
 
-function step(key, d){
-  const min = key==='interval'?1:1, max = key==='interval'?1440:10;
-  let v = parseInt(document.getElementById(key+'Val').textContent)+d;
-  v = Math.max(min, Math.min(max, v));
-  document.getElementById(key+'Val').textContent=v;
-  cur[key]=v;
+function step(key,d){
+  const max=key==='interval'?1440:10;
+  let v=parseInt(document.getElementById(key+'Val').textContent)+d;
+  v=Math.max(1,Math.min(max,v));
+  document.getElementById(key+'Val').textContent=v; cur[key]=v;
+  if(key==='streak') renderDots(v);
 }
 
 function saveConfig(){
-  const body='interval='+cur.interval+'&streak='+cur.streak;
-  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body,cache:'no-store'})
-    .then(r=>r.json()).then(d=>{
-      msg('cfgMsg','✅ 已保存','ok'); refresh();
-    }).catch(e=>msg('cfgMsg','❌ 失败:'+e,'err'));
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'interval='+cur.interval+'&streak='+cur.streak,cache:'no-store'})
+    .then(r=>r.json()).then(()=>{msg('cfgMsg','✅ 已保存到电视','ok');refresh();})
+    .catch(e=>msg('cfgMsg','❌ 保存失败：'+e,'err'));
 }
 
 function popupNow(){
-  fetch('/api/popup',{method:'POST',cache:'no-store'})
-    .then(()=>msg('cfgMsg','⚡ 已向电视发送弹窗','ok'))
-    .catch(e=>msg('cfgMsg','❌ 弹窗失败:'+e,'err'));
+  fetch('/api/popup',{method:'POST',cache:'no-store'}).then(r=>r.json()).then(d=>{
+    if(d.ok) msg('cfgMsg','⚡ 已让电视弹出全屏题目','ok');
+    else msg('cfgMsg','⚠️ '+(d.msg||'未弹窗'),'err');
+  }).catch(e=>msg('cfgMsg','❌ 弹窗失败：'+e,'err'));
+}
+
+function formatBank(){
+  const t=document.getElementById('bankInput').value.trim();
+  if(!t){msg('bankMsg','请先粘贴内容','err');return;}
+  try{
+    const j=JSON.parse(t);
+    const arr=(j.questions||j);
+    if(!Array.isArray(arr)||arr.length===0) throw new Error('没有 questions 数组');
+    document.getElementById('bankInput').value=JSON.stringify({questions:arr},null,2);
+    msg('bankMsg','✓ JSON 合法，共 '+arr.length+' 题，可直接推送','info');
+  }catch(e){msg('bankMsg','✗ JSON 解析失败：'+e.message,'err');}
 }
 
 function pushBank(){
@@ -115,14 +187,15 @@ function pushBank(){
   fetch('/api/bank',{method:'POST',headers:{'Content-Type':'application/json'},body:t,cache:'no-store'})
     .then(r=>r.json()).then(d=>{
       if(d.ok){msg('bankMsg','✅ 推送成功，电视已入库 '+d.count+' 题','ok');document.getElementById('bankInput').value='';refresh();}
-      else msg('bankMsg','❌ '+d.msg,'err');
-    }).catch(e=>msg('bankMsg','❌ 失败:'+e,'err'));
+      else msg('bankMsg','❌ '+(d.msg||'格式有误'),'err');
+    }).catch(e=>msg('bankMsg','❌ 推送失败：'+e,'err'));
 }
 
-function msg(id,t,c){const el=document.getElementById(id);el.textContent=t;el.className='msg '+c;setTimeout(()=>{if(el.textContent===t)el.textContent='';},5000);}
+function msg(id,t,c){const el=document.getElementById(id);el.textContent=t;el.className='msg show '+c;
+  setTimeout(()=>{if(el.textContent===t){el.textContent='';el.className='msg';}},5000);}
 
 refresh();
-setInterval(refresh, 8000);
+setInterval(refresh,6000);
 </script>
 </body>
 </html>

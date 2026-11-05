@@ -1,0 +1,26 @@
+   1: package com.huiyang.quizlocktv
+   2: 
+   3: import java.net.NetworkInterface
+   4: 
+   5: /** 获取电视在局域网里的 IPv4 地址（手机据此访问控制台）。 */
+   6: object NetworkInfo {
+   7:     const val PORT = 8770
+   8: 
+   9:     fun localIp(): String {
+  10:         try {
+  11:             val en = NetworkInterface.getNetworkInterfaces()
+  12:             for (intf in en) {
+  13:                 if (!intf.isUp || intf.isLoopback) continue
+  14:                 for (addr in intf.inetAddresses) {
+  15:                     if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") != true) {
+  16:                         return addr.hostAddress ?: ""
+  17:                     }
+  18:                 }
+  19:             }
+  20:         } catch (e: Exception) {}
+  21:         return "未知"
+  22:     }
+  23: 
+  24:     /** 手机浏览器要访问的完整地址，如 http://192.168.1.50:8770 */
+  25:     fun consoleUrl(): String = "http://${localIp()}:$PORT"
+  26: }

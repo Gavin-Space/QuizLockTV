@@ -1,0 +1,76 @@
+   1: package com.huiyang.quizlocktv
+   2: 
+   3: import android.content.Context
+   4: import android.content.SharedPreferences
+   5: 
+   6: /**
+   7:  * 用 SharedPreferences 保存：题库原文、当前进度指针、出题间隔、同步地址、上次同步时间。
+   8:  * 题库以 JSON 字符串整体存储，解析结果缓存到内存。
+   9:  */
+  10: object QuizStore {
+  11:     private const val PREF = "quiz_lock_pref"
+  12:     private const val KEY_RAW = "quiz_raw_json"        // 题库原文 JSON
+  13:     private const val KEY_POINTER = "pointer"          // 当前出到第几题（循环推进）
+  14:     private const val KEY_INTERVAL = "interval_min"    // 弹窗间隔(分钟)
+  15:     private const val KEY_URL = "sync_url"             // 入口B：自动同步地址
+  16:     private const val KEY_LAST_SYNC = "last_sync"      // 上次同步成功时间戳
+  17:     private const val KEY_STREAK = "required_streak"   // 需连续答对几题才解锁（防乱点）
+  18: 
+  19:     private var cache: List<Question>? = null
+  20: 
+  21:     private fun sp(c: Context): SharedPreferences =
+  22:         c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+  23: 
+  24:     // ---- 题库读写 ----
+  25:     fun saveRaw(c: Context, rawJson: String) {
+  26:         sp(c).edit().putString(KEY_RAW, rawJson).putInt(KEY_POINTER, 0).apply()
+  27:         cache = null // 题库更新，重置缓存与进度
+  28:     }
+  29: 
+  30:     fun currentRaw(c: Context): String = sp(c).getString(KEY_RAW, "") ?: ""
+  31: 
+  32:     fun questions(c: Context): List<Question> {
+  33:         cache?.let { return it }
+  34:         val raw = currentRaw(c)
+  35:         val parsed = if (raw.isBlank()) emptyList() else
+  36:             try { QuizParser.parse(raw) } catch (e: Exception) { emptyList() }
+  37:         cache = parsed
+  38:         return parsed
+  39:     }
+  40: 
+  41:     fun hasBank(c: Context): Boolean = questions(c).isNotEmpty()
+  42: 
+  43:     /**
+  44:      * 取下一道未出过的题：返回当前指针下标，并把指针循环推进到下一题。
+  45:      * 首次弹出和答错后追加新题都调用本方法，保证每次都是不同的题、不重复。
+  46:      */
+  47:     fun takeNext(c: Context): Int {
+  48:         val n = questions(c).size
+  49:         if (n == 0) return -1
+  50:         val p = sp(c).getInt(KEY_POINTER, 0) % n
+  51:         sp(c).edit().putInt(KEY_POINTER, (p + 1) % n).apply()
+  52:         return p
+  53:     }
+  54: 
+  55:     // ---- 配置 ----
+  56:     fun setInterval(c: Context, min: Int) {
+  57:         sp(c).edit().putInt(KEY_INTERVAL, min.coerceIn(1, 1440)).apply()
+  58:     }
+  59:     fun getInterval(c: Context): Int = sp(c).getInt(KEY_INTERVAL, 10)
+  60: 
+  61:     fun setSyncUrl(c: Context, url: String) {
+  62:         sp(c).edit().putString(KEY_URL, url.trim()).apply()
+  63:     }
+  64:     fun getSyncUrl(c: Context): String = sp(c).getString(KEY_URL, "") ?: ""
+  65: 
+  66:     fun setLastSync(c: Context, t: Long) {
+  67:         sp(c).edit().putLong(KEY_LAST_SYNC, t).apply()
+  68:     }
+  69:     fun getLastSync(c: Context): Long = sp(c).getLong(KEY_LAST_SYNC, 0L)
+  70: 
+  71:     /** 解锁所需连续答对题数，默认 3，可设 1~10。设越大越难靠蒙混过关。 */
+  72:     fun setStreak(c: Context, n: Int) {
+  73:         sp(c).edit().putInt(KEY_STREAK, n.coerceIn(1, 10)).apply()
+  74:     }
+  75:     fun getStreak(c: Context): Int = sp(c).getInt(KEY_STREAK, 3)
+  76: }

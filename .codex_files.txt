@@ -1,0 +1,19 @@
+
+Length LastWriteTime      Name
+------ -------------      ----
+  7706 2026/11/5 13:07:37 QuizLockActivity.kt
+  7504 2026/11/5 12:51:31 QuizLockActivity.kt.preui
+  7502 2026/11/5 7:10:04  _preview.txt
+ 10027 2026/11/5 4:22:38  _main_numbered.txt
+  8985 2026/11/5 1:55:25  MainActivity.kt
+  8985 2026/11/5 1:55:25  MainActivity.kt.bak
+  8985 2026/11/5 1:55:25  MainActivity.kt.preui
+  3359 2026/11/4 18:34:28 LockService.kt
+  7095 2026/11/4 18:34:11 ControlServer.kt
+   855 2026/11/4 18:34:03 NetworkInfo.kt
+  3065 2026/11/4 18:23:26 QuizStore.kt
+   510 2026/11/4 17:37:45 AlarmReceiver.kt
+  1019 2026/11/4 17:37:45 BootReceiver.kt
+  2142 2026/11/4 17:37:25 QuizSync.kt
+  2007 2026/11/4 17:36:23 Question.kt
+

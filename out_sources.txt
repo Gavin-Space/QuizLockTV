@@ -1,0 +1,815 @@
+### _main_numbered.txt
+1	1	package com.huiyang.quizlocktv
+2	2	
+3	3	import android.app.Activity
+4	4	import android.content.Intent
+5	5	import android.graphics.Color
+6	6	import android.graphics.Typeface
+7	7	import android.os.Bundle
+8	8	import android.view.Gravity
+9	9	import android.view.View
+10	10	import android.widget.Button
+11	11	import android.widget.EditText
+12	12	import android.widget.LinearLayout
+13	13	import android.widget.ScrollView
+14	14	import android.widget.TextView
+15	15	import android.widget.Toast
+16	16	
+17	17	/**
+18	18	 * 管理主页 = 题库入口。
+19	19	 * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+20	20	 * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+21	21	 * 另：设置出题间隔、测试锁屏。
+22	22	 */
+23	23	class MainActivity : Activity() {
+24	24	
+25	25	    private lateinit var statusView: TextView
+26	26	    private lateinit var intervalLabel: TextView
+27	27	    private lateinit var streakLabel: TextView
+28	28	    private lateinit var pasteInput: EditText
+29	29	    private lateinit var urlInput: EditText
+30	30	
+31	31	    override fun onCreate(savedInstanceState: Bundle?) {
+32	32	        super.onCreate(savedInstanceState)
+33	33	        buildLayout()
+34	34	        refreshStatus()
+35	35	        startServiceAndSchedule()
+36	36	    }
+37	37	
+38	38	    private fun startServiceAndSchedule() {
+39	39	        val svc = Intent(this, LockService::class.java)
+40	40	        runCatching { startForegroundService(svc) }
+41	41	            .onFailure { runCatching { startService(svc) } }
+42	42	        LockService.scheduleNext(this)
+43	43	    }
+44	44	
+45	45	    private fun buildLayout() {
+46	46	        val root = ScrollView(this).apply {
+47	47	            setBackgroundColor(Color.parseColor("#0B1220"))
+48	48	            isFillViewport = true
+49	49	        }
+50	50	        val col = LinearLayout(this).apply {
+51	51	            orientation = LinearLayout.VERTICAL
+52	52	            setPadding(dp(24), dp(24), dp(24), dp(24))
+53	53	        }
+54	54	
+55	55	        col.addView(header("答题锁 TV"))
+56	56	
+57	57	        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+58	58	        col.addView(TextView(this).apply {
+59	59	            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+60	60	            textSize = 16f
+61	61	            setTextColor(Color.parseColor("#1f6feb"))
+62	62	            setTypeface(typeface, Typeface.BOLD)
+63	63	            setPadding(0, dp(4), 0, dp(4))
+64	64	            setBackgroundColor(Color.parseColor("#0B2A4A"))
+65	65	            gravity = Gravity.CENTER
+66	66	            setPadding(dp(12), dp(12), dp(12), dp(12))
+67	67	        })
+68	68	
+69	69	        statusView = TextView(this).apply {
+70	70	            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+71	71	            setPadding(0, dp(6), 0, dp(16))
+72	72	        }
+73	73	        col.addView(statusView)
+74	74	
+75	75	        // 间隔设置
+76	76	        col.addView(subhead("每看几分钟弹一题："))
+77	77	        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+78	78	        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+79	79	        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+80	80	        row.addView(intervalLabel)
+81	81	        row.addView(btn("+1", 1f) { bumpInterval(1) })
+82	82	        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+83	83	        col.addView(row)
+84	84	
+85	85	        // 防乱点：需连续答对几题才解锁
+86	86	        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+87	87	        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+88	88	        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+89	89	        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+90	90	        rowS.addView(streakLabel)
+### AlarmReceiver.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.content.BroadcastReceiver
+4	import android.content.Context
+5	import android.content.Intent
+6	
+7	/**
+8	 * 每 N 分钟闹钟触发：拉起全屏锁屏出题页。
+9	 */
+10	class AlarmReceiver : BroadcastReceiver() {
+11	    override fun onReceive(ctx: Context, intent: Intent) {
+12	        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+13	            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+14	        }
+15	        try { ctx.startActivity(lock) } catch (e: Exception) {}
+16	    }
+17	}
+### BootReceiver.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.content.BroadcastReceiver
+4	import android.content.Context
+5	import android.content.Intent
+6	import android.os.Build
+7	
+8	/**
+9	 * 开机完成：启动前台服务（负责安排每 N 分钟弹窗），并立即弹"开机首题"。
+10	 */
+11	class BootReceiver : BroadcastReceiver() {
+12	    override fun onReceive(ctx: Context, intent: Intent) {
+13	        val svc = Intent(ctx, LockService::class.java)
+14	        try {
+15	            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+16	                ctx.startForegroundService(svc)
+17	            } else {
+18	                ctx.startService(svc)
+19	            }
+20	        } catch (e: Exception) { /* 个别 ROM 限制，忽略 */ }
+21	
+22	        // 开机先做一道题：从后台拉起锁屏页
+23	        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+24	            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+25	            putExtra(QuizLockActivity.EXTRA_FIRST, true)
+26	        }
+27	        try { ctx.startActivity(lock) } catch (e: Exception) {}
+28	    }
+29	}
+### ControlServer.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.content.Context
+4	import android.content.Intent
+5	import java.io.BufferedReader
+6	import java.io.ByteArrayOutputStream
+7	import java.io.InputStream
+8	import java.io.OutputStream
+9	import java.net.InetSocketAddress
+10	import java.net.NetworkInterface
+11	import java.net.ServerSocket
+12	import java.net.Socket
+13	import java.net.URLDecoder
+14	import java.nio.charset.StandardCharsets
+15	import kotlin.concurrent.thread
+16	
+17	/**
+18	 * 内置局域网 HTTP 控制服务器：让同一 WiFi 下的手机/电脑用浏览器控制电视。
+19	 * 路由：
+20	 *   GET  /             -> 手机控制台网页(assets/console.html)
+21	 *   GET  /api/status   -> 当前题库数/间隔/连对/IP 的 JSON
+22	 *   POST /api/bank     -> body 为题库 JSON，校验后整库替换
+23	 *   POST /api/config   -> body: interval=10&streak=3，改弹窗间隔与连对数
+24	 *   POST /api/popup    -> 立即拉起全屏锁屏出题
+25	 * 纯 JDK ServerSocket 实现，不依赖第三方库，targetSdk30 无 cleartext 限制问题。
+26	 */
+27	class ControlServer(private val ctx: Context, private val port: Int = NetworkInfo.PORT) {
+28	
+29	    @Volatile private var running = false
+30	    private var server: ServerSocket? = null
+31	
+32	    fun start() {
+33	        if (running) return
+34	        running = true
+35	        thread(isDaemon = true) {
+36	            try {
+37	                server = ServerSocket().apply {
+38	                    reuseAddress = true
+39	                    bind(InetSocketAddress(port))
+40	                }
+41	                while (running) {
+42	                    val socket = try { server?.accept() ?: break } catch (e: Exception) { if (!running) break else continue }
+43	                    thread(isDaemon = true) { handle(socket) }
+44	                }
+45	            } catch (e: Exception) {
+46	                // 端口占用等，忽略
+47	            }
+48	        }
+49	    }
+50	
+51	    fun stop() {
+52	        running = false
+53	        runCatching { server?.close() }
+54	    }
+55	
+56	    private fun handle(socket: Socket) {
+57	        try {
+58	            socket.use { s ->
+59	                s.soTimeout = 8000
+60	                val input = s.getInputStream()
+61	                val output = s.getOutputStream()
+62	                val reader = input.reader(StandardCharsets.UTF_8).buffered()
+63	
+64	                val requestLine = reader.readLine() ?: return
+65	                val parts = requestLine.split(" ")
+66	                if (parts.size < 2) return
+67	                val method = parts[0]
+68	                val path = parts[1]
+69	
+70	                // 读头部，拿 Content-Length
+71	                var contentLength = 0
+72	                while (true) {
+73	                    val line = reader.readLine() ?: break
+74	                    if (line.isEmpty()) break
+75	                    if (line.lowercase().startsWith("content-length:")) {
+76	                        contentLength = line.substringAfter(":").trim().toIntOrNull() ?: 0
+77	                    }
+78	                }
+79	
+80	                val body = if (contentLength > 0) readNChars(reader, contentLength) else ""
+81	
+82	                route(method, path, body, output)
+83	            }
+84	        } catch (e: Exception) {
+85	            // 单次请求出错不影响服务
+86	        }
+87	    }
+88	
+89	    private fun readNChars(reader: BufferedReader, n: Int): String {
+90	        val buf = CharArray(n)
+### LockService.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.app.AlarmManager
+4	import android.app.Notification
+5	import android.app.NotificationChannel
+6	import android.app.NotificationManager
+7	import android.app.PendingIntent
+8	import android.app.Service
+9	import android.content.Context
+10	import android.content.Intent
+11	import android.os.Build
+12	import android.os.IBinder
+13	
+14	/**
+15	 * 前台常驻服务：保证进程不被电视待机清理，并提供"答对解锁后重新计时 N 分钟"的闹钟调度。
+16	 * 计时起点 = 上一次答对解锁的时刻，符合"每满 N 分钟弹一题"。
+17	 */
+18	class LockService : Service() {
+19	
+20	    private var controlServer: ControlServer? = null
+21	
+22	    override fun onCreate() {
+23	        super.onCreate()
+24	        startAsForeground()
+25	        // 启动内置局域网控制服务器：同一 WiFi 下手机/电脑可远程放题与弹窗
+26	        controlServer = ControlServer(applicationContext).also { it.start() }
+27	    }
+28	
+29	    override fun onDestroy() {
+30	        super.onDestroy()
+31	        runCatching { controlServer?.stop() }
+32	        controlServer = null
+33	    }
+34	
+35	    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+36	        startAsForeground()
+37	        scheduleNext(this)
+38	        return START_STICKY
+39	    }
+40	
+41	    private fun startAsForeground() {
+42	        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+43	        val channelId = "quiz_lock_svc"
+44	        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+45	            val ch = NotificationChannel(channelId, "答题锁运行中", NotificationManager.IMPORTANCE_LOW)
+46	            nm.createNotificationChannel(ch)
+47	        }
+48	        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+49	            Notification.Builder(this, channelId) else Notification.Builder(this)
+50	        val notification = builder
+51	            .setContentTitle("答题锁 TV")
+52	            .setContentText("运行中：答题后才能看电视")
+53	            .setSmallIcon(R.drawable.ic_launcher)
+54	            .build()
+55	        startForeground(1, notification)
+56	    }
+57	
+58	    override fun onBind(intent: Intent?): IBinder? = null
+59	
+60	    companion object {
+61	        private const val REQ = 1001
+62	
+63	        /** 安排 interval 分钟后弹出下一题。 */
+64	        fun scheduleNext(ctx: Context) {
+65	            val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+66	            val pi = pending(ctx)
+67	            val intervalMin = QuizStore.getInterval(ctx)
+68	            val triggerAt = System.currentTimeMillis() + intervalMin * 60_000L
+69	            try {
+70	                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+71	                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+72	                } else {
+73	                    am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+74	                }
+75	            } catch (e: SecurityException) {
+76	                am.set(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+77	            }
+78	        }
+79	
+80	        private fun pending(ctx: Context): PendingIntent {
+81	            val i = Intent(ctx, AlarmReceiver::class.java)
+82	            val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+83	                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+84	            else PendingIntent.FLAG_UPDATE_CURRENT
+85	            return PendingIntent.getBroadcast(ctx, REQ, i, flag)
+86	        }
+87	    }
+88	}
+### MainActivity.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.app.Activity
+4	import android.content.Intent
+5	import android.graphics.Color
+6	import android.graphics.Typeface
+7	import android.os.Bundle
+8	import android.view.Gravity
+9	import android.view.View
+10	import android.widget.Button
+11	import android.widget.EditText
+12	import android.widget.LinearLayout
+13	import android.widget.ScrollView
+14	import android.widget.TextView
+15	import android.widget.Toast
+16	
+17	/**
+18	 * 管理主页 = 题库入口。
+19	 * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+20	 * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+21	 * 另：设置出题间隔、测试锁屏。
+22	 */
+23	class MainActivity : Activity() {
+24	
+25	    private lateinit var statusView: TextView
+26	    private lateinit var intervalLabel: TextView
+27	    private lateinit var streakLabel: TextView
+28	    private lateinit var pasteInput: EditText
+29	    private lateinit var urlInput: EditText
+30	
+31	    override fun onCreate(savedInstanceState: Bundle?) {
+32	        super.onCreate(savedInstanceState)
+33	        buildLayout()
+34	        refreshStatus()
+35	        startServiceAndSchedule()
+36	    }
+37	
+38	    private fun startServiceAndSchedule() {
+39	        val svc = Intent(this, LockService::class.java)
+40	        runCatching { startForegroundService(svc) }
+41	            .onFailure { runCatching { startService(svc) } }
+42	        LockService.scheduleNext(this)
+43	    }
+44	
+45	    private fun buildLayout() {
+46	        val root = ScrollView(this).apply {
+47	            setBackgroundColor(Color.parseColor("#0B1220"))
+48	            isFillViewport = true
+49	        }
+50	        val col = LinearLayout(this).apply {
+51	            orientation = LinearLayout.VERTICAL
+52	            setPadding(dp(24), dp(24), dp(24), dp(24))
+53	        }
+54	
+55	        col.addView(header("答题锁 TV"))
+56	
+57	        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+58	        col.addView(TextView(this).apply {
+59	            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+60	            textSize = 16f
+61	            setTextColor(Color.parseColor("#1f6feb"))
+62	            setTypeface(typeface, Typeface.BOLD)
+63	            setPadding(0, dp(4), 0, dp(4))
+64	            setBackgroundColor(Color.parseColor("#0B2A4A"))
+65	            gravity = Gravity.CENTER
+66	            setPadding(dp(12), dp(12), dp(12), dp(12))
+67	        })
+68	
+69	        statusView = TextView(this).apply {
+70	            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+71	            setPadding(0, dp(6), 0, dp(16))
+72	        }
+73	        col.addView(statusView)
+74	
+75	        // 间隔设置
+76	        col.addView(subhead("每看几分钟弹一题："))
+77	        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+78	        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+79	        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+80	        row.addView(intervalLabel)
+81	        row.addView(btn("+1", 1f) { bumpInterval(1) })
+82	        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+83	        col.addView(row)
+84	
+85	        // 防乱点：需连续答对几题才解锁
+86	        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+87	        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+88	        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+89	        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+90	        rowS.addView(streakLabel)
+### MainActivity.kt.bak
+1	package com.huiyang.quizlocktv
+2	
+3	import android.app.Activity
+4	import android.content.Intent
+5	import android.graphics.Color
+6	import android.graphics.Typeface
+7	import android.os.Bundle
+8	import android.view.Gravity
+9	import android.view.View
+10	import android.widget.Button
+11	import android.widget.EditText
+12	import android.widget.LinearLayout
+13	import android.widget.ScrollView
+14	import android.widget.TextView
+15	import android.widget.Toast
+16	
+17	/**
+18	 * 管理主页 = 题库入口。
+19	 * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+20	 * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+21	 * 另：设置出题间隔、测试锁屏。
+22	 */
+23	class MainActivity : Activity() {
+24	
+25	    private lateinit var statusView: TextView
+26	    private lateinit var intervalLabel: TextView
+27	    private lateinit var streakLabel: TextView
+28	    private lateinit var pasteInput: EditText
+29	    private lateinit var urlInput: EditText
+30	
+31	    override fun onCreate(savedInstanceState: Bundle?) {
+32	        super.onCreate(savedInstanceState)
+33	        buildLayout()
+34	        refreshStatus()
+35	        startServiceAndSchedule()
+36	    }
+37	
+38	    private fun startServiceAndSchedule() {
+39	        val svc = Intent(this, LockService::class.java)
+40	        runCatching { startForegroundService(svc) }
+41	            .onFailure { runCatching { startService(svc) } }
+42	        LockService.scheduleNext(this)
+43	    }
+44	
+45	    private fun buildLayout() {
+46	        val root = ScrollView(this).apply {
+47	            setBackgroundColor(Color.parseColor("#0B1220"))
+48	            isFillViewport = true
+49	        }
+50	        val col = LinearLayout(this).apply {
+51	            orientation = LinearLayout.VERTICAL
+52	            setPadding(dp(24), dp(24), dp(24), dp(24))
+53	        }
+54	
+55	        col.addView(header("答题锁 TV"))
+56	
+57	        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+58	        col.addView(TextView(this).apply {
+59	            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+60	            textSize = 16f
+61	            setTextColor(Color.parseColor("#1f6feb"))
+62	            setTypeface(typeface, Typeface.BOLD)
+63	            setPadding(0, dp(4), 0, dp(4))
+64	            setBackgroundColor(Color.parseColor("#0B2A4A"))
+65	            gravity = Gravity.CENTER
+66	            setPadding(dp(12), dp(12), dp(12), dp(12))
+67	        })
+68	
+69	        statusView = TextView(this).apply {
+70	            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+71	            setPadding(0, dp(6), 0, dp(16))
+72	        }
+73	        col.addView(statusView)
+74	
+75	        // 间隔设置
+76	        col.addView(subhead("每看几分钟弹一题："))
+77	        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+78	        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+79	        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+80	        row.addView(intervalLabel)
+81	        row.addView(btn("+1", 1f) { bumpInterval(1) })
+82	        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+83	        col.addView(row)
+84	
+85	        // 防乱点：需连续答对几题才解锁
+86	        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+87	        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+88	        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+89	        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+90	        rowS.addView(streakLabel)
+### NetworkInfo.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import java.net.NetworkInterface
+4	
+5	/** 获取电视在局域网里的 IPv4 地址（手机据此访问控制台）。 */
+6	object NetworkInfo {
+7	    const val PORT = 8770
+8	
+9	    fun localIp(): String {
+10	        try {
+11	            val en = NetworkInterface.getNetworkInterfaces()
+12	            for (intf in en) {
+13	                if (!intf.isUp || intf.isLoopback) continue
+14	                for (addr in intf.inetAddresses) {
+15	                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") != true) {
+16	                        return addr.hostAddress ?: ""
+17	                    }
+18	                }
+19	            }
+20	        } catch (e: Exception) {}
+21	        return "未知"
+22	    }
+23	
+24	    /** 手机浏览器要访问的完整地址，如 http://192.168.1.50:8770 */
+25	    fun consoleUrl(): String = "http://${localIp()}:$PORT"
+26	}
+### Question.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import org.json.JSONArray
+4	import org.json.JSONObject
+5	
+6	/**
+7	 * 一道题。
+8	 * type = "single"(单选) 或 "judge"(判断)
+9	 * correct: single=正确选项下标(0基)；judge=0表示错误/false, 1表示正确/true
+10	 */
+11	data class Question(
+12	    val type: String,
+13	    val stem: String,
+14	    val options: List<String>,   // 判断题为空列表
+15	    val correct: Int,
+16	    val analysis: String
+17	) {
+18	    val isJudge get() = type == "judge"
+19	}
+20	
+21	object QuizParser {
+22	    /** 解析题库 JSON，返回题目列表；格式错误时抛 IllegalArgumentException */
+23	    fun parse(text: String): List<Question> {
+24	        val root = JSONObject(text.trim())
+25	        val arr = root.optJSONArray("questions")
+26	            ?: throw IllegalArgumentException("缺少 questions 数组")
+27	        val list = ArrayList<Question>()
+28	        for (i in 0 until arr.length()) {
+29	            val o = arr.getJSONObject(i)
+30	            val type = o.optString("type")
+31	            val stem = o.optString("stem")
+32	            if (stem.isBlank()) continue
+33	            when (type) {
+34	                "single" -> {
+35	                    val opts = ArrayList<String>()
+36	                    val oa = o.optJSONArray("options") ?: JSONArray()
+37	                    for (k in 0 until oa.length()) opts.add(oa.getString(k))
+38	                    if (opts.isEmpty()) continue
+39	                    val ans = o.optInt("answer", -1)
+40	                    if (ans < 0 || ans >= opts.size) continue
+41	                    list.add(Question(type, stem, opts, ans, o.optString("analysis")))
+42	                }
+43	                "judge" -> {
+44	                    val ans = if (o.optBoolean("answer", false)) 1 else 0
+45	                    list.add(Question(type, stem, emptyList(), ans, o.optString("analysis")))
+46	                }
+47	                else -> { /* 跳过未知题型 */ }
+48	            }
+49	        }
+50	        if (list.isEmpty()) throw IllegalArgumentException("没有解析到任何有效题目，请检查 JSON 格式")
+51	        return list
+52	    }
+53	}
+### QuizLockActivity.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.app.Activity
+4	import android.graphics.Color
+5	import android.graphics.Typeface
+6	import android.os.Bundle
+7	import android.os.Handler
+8	import android.os.Looper
+9	import android.view.Gravity
+10	import android.view.KeyEvent
+11	import android.view.WindowManager
+12	import android.widget.Button
+13	import android.widget.LinearLayout
+14	import android.widget.ScrollView
+15	import android.widget.TextView
+16	import android.widget.Toast
+17	import kotlin.random.Random
+18	
+19	/**
+20	 * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+21	 * 防乱点两道防线：
+22	 *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+23	 *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+24	 * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+25	 */
+26	class QuizLockActivity : Activity() {
+27	
+28	    companion object {
+29	        const val EXTRA_FIRST = "first"
+30	    }
+31	
+32	    private lateinit var stemView: TextView
+33	    private lateinit var feedbackView: TextView
+34	    private lateinit var progressView: TextView
+35	    private lateinit var optionsBox: LinearLayout
+36	
+37	    private var requiredStreak = 3
+38	    private var correctCount = 0
+39	    private var current: Question? = null
+40	
+41	    override fun onCreate(savedInstanceState: Bundle?) {
+42	        super.onCreate(savedInstanceState)
+43	        window.addFlags(
+44	            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+45	            WindowManager.LayoutParams.FLAG_SECURE or
+46	            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+47	            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+48	            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+49	        )
+50	        requiredStreak = QuizStore.getStreak(this)
+51	        correctCount = 0
+52	        buildLayout()
+53	        showNextQuestion()
+54	    }
+55	
+56	    private fun buildLayout() {
+57	        val root = ScrollView(this).apply {
+58	            setBackgroundColor(Color.parseColor("#0B1220"))
+59	            isFillViewport = true
+60	        }
+61	        val col = LinearLayout(this).apply {
+62	            orientation = LinearLayout.VERTICAL
+63	            setPadding(dp(28), dp(28), dp(28), dp(28))
+64	            gravity = Gravity.CENTER_HORIZONTAL
+65	        }
+66	
+67	        val title = TextView(this).apply {
+68	            text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+69	            textSize = 22f
+70	            setTypeface(typeface, Typeface.BOLD)
+71	            setTextColor(Color.parseColor("#2BB673"))
+72	            gravity = Gravity.CENTER
+73	        }
+74	
+75	        progressView = TextView(this).apply {
+76	            textSize = 18f
+77	            setTextColor(Color.parseColor("#9FB0CC"))
+78	            gravity = Gravity.CENTER
+79	            setPadding(0, dp(6), 0, dp(4))
+80	        }
+81	
+82	        stemView = TextView(this).apply {
+83	            textSize = 26f
+84	            setTypeface(typeface, Typeface.BOLD)
+85	            setTextColor(Color.WHITE)
+86	            setPadding(0, dp(16), 0, dp(16))
+87	        }
+88	
+89	        optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+90	
+### QuizStore.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.content.Context
+4	import android.content.SharedPreferences
+5	
+6	/**
+7	 * 用 SharedPreferences 保存：题库原文、当前进度指针、出题间隔、同步地址、上次同步时间。
+8	 * 题库以 JSON 字符串整体存储，解析结果缓存到内存。
+9	 */
+10	object QuizStore {
+11	    private const val PREF = "quiz_lock_pref"
+12	    private const val KEY_RAW = "quiz_raw_json"        // 题库原文 JSON
+13	    private const val KEY_POINTER = "pointer"          // 当前出到第几题（循环推进）
+14	    private const val KEY_INTERVAL = "interval_min"    // 弹窗间隔(分钟)
+15	    private const val KEY_URL = "sync_url"             // 入口B：自动同步地址
+16	    private const val KEY_LAST_SYNC = "last_sync"      // 上次同步成功时间戳
+17	    private const val KEY_STREAK = "required_streak"   // 需连续答对几题才解锁（防乱点）
+18	
+19	    private var cache: List<Question>? = null
+20	
+21	    private fun sp(c: Context): SharedPreferences =
+22	        c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+23	
+24	    // ---- 题库读写 ----
+25	    fun saveRaw(c: Context, rawJson: String) {
+26	        sp(c).edit().putString(KEY_RAW, rawJson).putInt(KEY_POINTER, 0).apply()
+27	        cache = null // 题库更新，重置缓存与进度
+28	    }
+29	
+30	    fun currentRaw(c: Context): String = sp(c).getString(KEY_RAW, "") ?: ""
+31	
+32	    fun questions(c: Context): List<Question> {
+33	        cache?.let { return it }
+34	        val raw = currentRaw(c)
+35	        val parsed = if (raw.isBlank()) emptyList() else
+36	            try { QuizParser.parse(raw) } catch (e: Exception) { emptyList() }
+37	        cache = parsed
+38	        return parsed
+39	    }
+40	
+41	    fun hasBank(c: Context): Boolean = questions(c).isNotEmpty()
+42	
+43	    /**
+44	     * 取下一道未出过的题：返回当前指针下标，并把指针循环推进到下一题。
+45	     * 首次弹出和答错后追加新题都调用本方法，保证每次都是不同的题、不重复。
+46	     */
+47	    fun takeNext(c: Context): Int {
+48	        val n = questions(c).size
+49	        if (n == 0) return -1
+50	        val p = sp(c).getInt(KEY_POINTER, 0) % n
+51	        sp(c).edit().putInt(KEY_POINTER, (p + 1) % n).apply()
+52	        return p
+53	    }
+54	
+55	    // ---- 配置 ----
+56	    fun setInterval(c: Context, min: Int) {
+57	        sp(c).edit().putInt(KEY_INTERVAL, min.coerceIn(1, 1440)).apply()
+58	    }
+59	    fun getInterval(c: Context): Int = sp(c).getInt(KEY_INTERVAL, 10)
+60	
+61	    fun setSyncUrl(c: Context, url: String) {
+62	        sp(c).edit().putString(KEY_URL, url.trim()).apply()
+63	    }
+64	    fun getSyncUrl(c: Context): String = sp(c).getString(KEY_URL, "") ?: ""
+65	
+66	    fun setLastSync(c: Context, t: Long) {
+67	        sp(c).edit().putLong(KEY_LAST_SYNC, t).apply()
+68	    }
+69	    fun getLastSync(c: Context): Long = sp(c).getLong(KEY_LAST_SYNC, 0L)
+70	
+71	    /** 解锁所需连续答对题数，默认 3，可设 1~10。设越大越难靠蒙混过关。 */
+72	    fun setStreak(c: Context, n: Int) {
+73	        sp(c).edit().putInt(KEY_STREAK, n.coerceIn(1, 10)).apply()
+74	    }
+75	    fun getStreak(c: Context): Int = sp(c).getInt(KEY_STREAK, 3)
+76	}
+### QuizSync.kt
+1	package com.huiyang.quizlocktv
+2	
+3	import android.content.Context
+4	import android.os.Handler
+5	import android.os.Looper
+6	import java.net.HttpURLConnection
+7	import java.net.URL
+8	
+9	/**
+10	 * 入口B：从用户填的 URL 拉取题库 JSON。fetchNow 内部自起后台线程，回调在主线程。
+11	 */
+12	object QuizSync {
+13	    interface Result {
+14	        fun onDone(ok: Boolean, msg: String)
+15	    }
+16	
+17	    /** 同步：拉取 URL，成功且能解析则替换本地题库。 */
+18	    fun fetchNow(ctx: Context, result: Result?) {
+19	        val url = QuizStore.getSyncUrl(ctx)
+20	        Thread {
+21	            if (url.isBlank()) {
+22	                post(result, false, "未设置同步地址")
+23	                return@Thread
+24	            }
+25	            try {
+26	                val text = httpGet(url)
+27	                if (text == null) {
+28	                    post(result, false, "无法访问地址（检查网络/链接是否公开可读）")
+29	                    return@Thread
+30	                }
+31	                // 先验证能解析成题库，再入库
+32	                QuizParser.parse(text)
+33	                QuizStore.saveRaw(ctx, text)
+34	                QuizStore.setLastSync(ctx, System.currentTimeMillis())
+35	                post(result, true, "同步成功，题库已更新")
+36	            } catch (e: Exception) {
+37	                post(result, false, "同步失败：${e.message}")
+38	            }
+39	        }.start()
+40	    }
+41	
+42	    private fun httpGet(u: String): String? {
+43	        var conn: HttpURLConnection? = null
+44	        return try {
+45	            conn = (URL(u).openConnection() as HttpURLConnection).apply {
+46	                connectTimeout = 10000
+47	                readTimeout = 10000
+48	                requestMethod = "GET"
+49	                instanceFollowRedirects = true
+50	            }
+51	            if (conn.responseCode in 200..299) {
+52	                conn.inputStream.bufferedReader().use { it.readText() }
+53	            } else null
+54	        } catch (e: Exception) {
+55	            null
+56	        } finally {
+57	            conn?.disconnect()
+58	        }
+59	    }
+60	
+61	    private fun post(r: Result?, ok: Boolean, msg: String) {
+62	        Handler(Looper.getMainLooper()).post { r?.onDone(ok, msg) }
+63	    }
+64	}

@@ -1,0 +1,40 @@
+---FILE D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\drawable\ic_launcher.xml---
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#0F8A4F" android:pathData="M0,0h108v108h-108z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M34,30h26a14,14 0 0 1 14,14v20a14,14 0 0 1 -14,14h-8l-2,8h-4l2,-8h-14z"/>
+</vector>
+---FILE D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\colors.xml---
+<resources>
+    <color name="green_primary">#0F8A4F</color>
+    <color name="bg">#0B1220</color>
+    <color name="card">#16243B</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text">#E6EFFF</color>
+    <color name="sub">#9FB0CC</color>
+    <color name="wrong">#FF5B5B</color>
+    <color name="correct">#2BB673</color>
+</resources>
+---FILE D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\strings.xml---
+<resources>
+    <string name="app_name">答题锁 TV</string>
+</resources>
+---FILE D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values\themes.xml---
+<resources>
+    <style name="Theme.QuizLock" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/green_primary</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:textColorPrimary">@color/text</item>
+    </style>
+
+    <style name="Theme.QuizLock.Fullscreen" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

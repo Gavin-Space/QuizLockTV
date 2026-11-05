@@ -1,0 +1,87 @@
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:35           1077 build.gradle
+-a---           2026/11/4    17:35             79 proguard-rules.pro
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:36           2810 AndroidManifest.xml
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\assets
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    18:33           5952 console.html
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\java\com\huiyang
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/5     1:43           7702 _view.txt
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\java\com\huiyang\quizlocktv
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/5     4:22          10027 _main_numbered.txt
+-a---           2026/11/4    17:37            510 AlarmReceiver.kt
+-a---           2026/11/4    17:37           1019 BootReceiver.kt
+-a---           2026/11/4    18:34           7095 ControlServer.kt
+-a---           2026/11/4    18:34           3359 LockService.kt
+-a---           2026/11/5     1:55           8985 MainActivity.kt
+-a---           2026/11/4    18:34           8985 MainActivity.kt.bak
+-a---           2026/11/4    18:34            855 NetworkInfo.kt
+-a---           2026/11/4    17:36           2007 Question.kt
+-a---           2026/11/5     1:11           7500 QuizLockActivity.kt
+-a---           2026/11/4    18:23           3065 QuizStore.kt
+-a---           2026/11/4    17:37           2142 QuizSync.kt
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\java\com\huiyang\quizlocktv_v1_bak
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:37            510 AlarmReceiver.kt
+-a---           2026/11/4    17:37           1019 BootReceiver.kt
+-a---           2026/11/4    18:34           7095 ControlServer.kt
+-a---           2026/11/4    18:34           3359 LockService.kt
+-a---           2026/11/5     1:55           8985 MainActivity.kt
+-a---           2026/11/4    18:34           8985 MainActivity.kt.bak
+-a---           2026/11/4    18:34            855 NetworkInfo.kt
+-a---           2026/11/4    17:36           2007 Question.kt
+-a---           2026/11/5     1:11           7500 QuizLockActivity.kt
+-a---           2026/11/4    18:23           3065 QuizStore.kt
+-a---           2026/11/4    17:37           2142 QuizSync.kt
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\drawable
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:36            404 ic_launcher.xml
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res\values
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:36            348 colors.xml
+-a---           2026/11/4    17:36             75 strings.xml
+-a---           2026/11/4    17:36            758 themes.xml
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res_v1_bak\drawable
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:36            404 ic_launcher.xml
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\res_v1_bak\values
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:36            348 colors.xml
+-a---           2026/11/4    17:36             75 strings.xml
+-a---           2026/11/4    17:36            758 themes.xml
+

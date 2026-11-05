@@ -1,0 +1,2102 @@
+===== _main_numbered.txt =====
+1	package com.huiyang.quizlocktv
+2	
+3	import android.app.Activity
+4	import android.content.Intent
+5	import android.graphics.Color
+6	import android.graphics.Typeface
+7	import android.os.Bundle
+8	import android.view.Gravity
+9	import android.view.View
+10	import android.widget.Button
+11	import android.widget.EditText
+12	import android.widget.LinearLayout
+13	import android.widget.ScrollView
+14	import android.widget.TextView
+15	import android.widget.Toast
+16	
+17	/**
+18	 * 管理主页 = 题库入口。
+19	 * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+20	 * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+21	 * 另：设置出题间隔、测试锁屏。
+22	 */
+23	class MainActivity : Activity() {
+24	
+25	    private lateinit var statusView: TextView
+26	    private lateinit var intervalLabel: TextView
+27	    private lateinit var streakLabel: TextView
+28	    private lateinit var pasteInput: EditText
+29	    private lateinit var urlInput: EditText
+30	
+31	    override fun onCreate(savedInstanceState: Bundle?) {
+32	        super.onCreate(savedInstanceState)
+33	        buildLayout()
+34	        refreshStatus()
+35	        startServiceAndSchedule()
+36	    }
+37	
+38	    private fun startServiceAndSchedule() {
+39	        val svc = Intent(this, LockService::class.java)
+40	        runCatching { startForegroundService(svc) }
+41	            .onFailure { runCatching { startService(svc) } }
+42	        LockService.scheduleNext(this)
+43	    }
+44	
+45	    private fun buildLayout() {
+46	        val root = ScrollView(this).apply {
+47	            setBackgroundColor(Color.parseColor("#0B1220"))
+48	            isFillViewport = true
+49	        }
+50	        val col = LinearLayout(this).apply {
+51	            orientation = LinearLayout.VERTICAL
+52	            setPadding(dp(24), dp(24), dp(24), dp(24))
+53	        }
+54	
+55	        col.addView(header("答题锁 TV"))
+56	
+57	        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+58	        col.addView(TextView(this).apply {
+59	            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+60	            textSize = 16f
+61	            setTextColor(Color.parseColor("#1f6feb"))
+62	            setTypeface(typeface, Typeface.BOLD)
+63	            setPadding(0, dp(4), 0, dp(4))
+64	            setBackgroundColor(Color.parseColor("#0B2A4A"))
+65	            gravity = Gravity.CENTER
+66	            setPadding(dp(12), dp(12), dp(12), dp(12))
+67	        })
+68	
+69	        statusView = TextView(this).apply {
+70	            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+71	            setPadding(0, dp(6), 0, dp(16))
+72	        }
+73	        col.addView(statusView)
+74	
+75	        // 间隔设置
+76	        col.addView(subhead("每看几分钟弹一题："))
+77	        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+78	        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+79	        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+80	        row.addView(intervalLabel)
+81	        row.addView(btn("+1", 1f) { bumpInterval(1) })
+82	        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+83	        col.addView(row)
+84	
+85	        // 防乱点：需连续答对几题才解锁
+86	        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+87	        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+88	        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+89	        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+90	        rowS.addView(streakLabel)
+91	        rowS.addView(btn("+1", 1f) { bumpStreak(1) })
+92	        rowS.addView(btn("设为3", 1.5f) { setStreak(3) })
+93	        col.addView(rowS)
+94	
+95	        // 入口A
+96	        col.addView(subhead("【入口A】粘贴导入题库 JSON："))
+97	        pasteInput = EditText(this).apply {
+98	            hint = "把 AI 生成的题库 JSON 粘贴到这里（需含 questions 数组）"
+99	            setTextColor(Color.WHITE)
+100	            setHintTextColor(Color.parseColor("#6B7A93"))
+101	            setBackgroundColor(Color.parseColor("#16243B"))
+102	            minHeight = dp(120)
+103	            gravity = Gravity.TOP or Gravity.START
+104	        }
+105	        col.addView(pasteInput)
+106	        col.addView(btnFull("保存并导入") { importFromPaste() })
+107	
+108	        // 入口B
+109	        col.addView(subhead("【入口B】题库链接自动同步："))
+110	        urlInput = EditText(this).apply {
+111	            hint = "填公开可读的 .json 地址，如 https://…/题库.json"
+112	            setTextColor(Color.WHITE)
+113	            setHintTextColor(Color.parseColor("#6B7A93"))
+114	            setBackgroundColor(Color.parseColor("#16243B"))
+115	            setText(QuizStore.getSyncUrl(this@MainActivity))
+116	        }
+117	        col.addView(urlInput)
+118	        val rowB = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+119	        rowB.addView(btn("保存地址", 1f) { saveUrl() })
+120	        rowB.addView(btn("立即同步", 1f) { doSync() })
+121	        col.addView(rowB)
+122	
+123	        // 测试
+124	        col.addView(btnFull("测试：立即弹一道题") {
+125	            if (QuizStore.hasBank(this)) {
+126	                startActivity(Intent(this, QuizLockActivity::class.java))
+127	            } else {
+128	                Toast.makeText(this, "还没有题库，先用入口A/B放题", Toast.LENGTH_SHORT).show()
+129	            }
+130	        })
+131	
+132	        root.addView(col)
+133	        setContentView(root)
+134	    }
+135	
+136	    // ---- 业务动作 ----
+137	    private fun bumpInterval(delta: Int) {
+138	        val v = (QuizStore.getInterval(this) + delta).coerceIn(1, 1440)
+139	        setInterval(v)
+140	    }
+141	
+142	    private fun setInterval(v: Int) {
+143	        QuizStore.setInterval(this, v)
+144	        LockService.scheduleNext(this)
+145	        refreshStatus()
+146	    }
+147	
+148	    private fun bumpStreak(delta: Int) {
+149	        setStreak((QuizStore.getStreak(this) + delta).coerceIn(1, 10))
+150	    }
+151	
+152	    private fun setStreak(v: Int) {
+153	        QuizStore.setStreak(this, v)
+154	        streakLabel.text = v.toString()
+155	        refreshStatus()
+156	    }
+157	
+158	    private fun importFromPaste() {
+159	        val text = pasteInput.text.toString()
+160	        if (text.isBlank()) { Toast.makeText(this, "请先粘贴内容", Toast.LENGTH_SHORT).show(); return }
+161	        try {
+162	            val n = QuizParser.parse(text).size
+163	            QuizStore.saveRaw(this, text)
+164	            Toast.makeText(this, "导入成功，共 $n 题", Toast.LENGTH_LONG).show()
+165	            pasteInput.setText("")
+166	            refreshStatus()
+167	        } catch (e: Exception) {
+168	            Toast.makeText(this, "格式有误：${e.message}", Toast.LENGTH_LONG).show()
+169	        }
+170	    }
+171	
+172	    private fun saveUrl() {
+173	        QuizStore.setSyncUrl(this, urlInput.text.toString())
+174	        Toast.makeText(this, "同步地址已保存", Toast.LENGTH_SHORT).show()
+175	        refreshStatus()
+176	    }
+177	
+178	    private fun doSync() {
+179	        QuizStore.setSyncUrl(this, urlInput.text.toString())
+180	        QuizSync.fetchNow(this, object : QuizSync.Result {
+181	            override fun onDone(ok: Boolean, msg: String) {
+182	                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+183	                if (ok) refreshStatus()
+184	            }
+185	        })
+186	    }
+187	
+188	    private fun refreshStatus() {
+189	        val count = QuizStore.questions(this).size
+190	        intervalLabel.text = QuizStore.getInterval(this).toString()
+191	        val last = QuizStore.getLastSync(this)
+192	        val lastStr = if (last == 0L) "从未同步"
+193	        else "上次同步 ${android.text.format.DateFormat.getDateFormat(this).format(java.util.Date(last))}"
+194	        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　连对 ${QuizStore.getStreak(this)} 题解锁　|　$lastStr"
+195	    }
+196	
+197	    // ---- 小工具 ----
+198	    private fun header(t: String) = TextView(this).apply {
+199	        text = t; textSize = 26f; setTypeface(typeface, Typeface.BOLD)
+200	        setTextColor(Color.parseColor("#2BB673"))
+201	    }
+202	
+203	    private fun subhead(t: String) = TextView(this).apply {
+204	        text = t; textSize = 17f; setTextColor(Color.WHITE)
+205	        setPadding(0, dp(18), 0, dp(8))
+206	    }
+207	
+208	    private fun labelView(t: String, w: Float) = TextView(this).apply {
+209	        text = t; textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+210	        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+211	    }
+212	
+213	    private fun btn(t: String, w: Float, onClick: () -> Unit) = Button(this).apply {
+214	        text = t; isAllCaps = false; textSize = 15f
+215	        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+216	        setBackgroundColor(Color.parseColor("#16243B")); setTextColor(Color.WHITE)
+217	        setOnClickListener { onClick() }
+218	    }
+219	
+220	    private fun btnFull(t: String, onClick: () -> Unit) = Button(this).apply {
+221	        text = t; isAllCaps = false; textSize = 18f
+222	        layoutParams = LinearLayout.LayoutParams(
+223	            LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
+224	        ).apply { topMargin = dp(12) }
+225	        setBackgroundColor(Color.parseColor("#0F8A4F")); setTextColor(Color.WHITE)
+226	        setOnClickListener { onClick() }
+227	    }
+228	
+229	    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+230	}
+
+===== _preview.txt =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import kotlin.random.Random
+
+/**
+ * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+ * 防乱点两道防线：
+ *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+ *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+ * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+ */
+class QuizLockActivity : Activity() {
+
+    companion object {
+        const val EXTRA_FIRST = "first"
+    }
+
+    private lateinit var stemView: TextView
+    private lateinit var feedbackView: TextView
+    private lateinit var progressView: TextView
+    private lateinit var optionsBox: LinearLayout
+
+    private var requiredStreak = 3
+    private var correctCount = 0
+    private var current: Question? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SECURE or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
+        requiredStreak = QuizStore.getStreak(this)
+        correctCount = 0
+        buildLayout()
+        showNextQuestion()
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val title = TextView(this).apply {
+            text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#2BB673"))
+            gravity = Gravity.CENTER
+        }
+
+        progressView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#9FB0CC"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(4))
+        }
+
+        stemView = TextView(this).apply {
+            textSize = 26f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(0, dp(16), 0, dp(16))
+        }
+
+        optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        feedbackView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#FF5B5B"))
+            setPadding(0, dp(16), 0, dp(8))
+        }
+
+        col.addView(title)
+        col.addView(progressView)
+        col.addView(stemView)
+        col.addView(optionsBox)
+        col.addView(feedbackView)
+        root.addView(col)
+        setContentView(root)
+        updateProgress()
+    }
+
+    private fun updateProgress() {
+        progressView.text = "已连续答对 $correctCount / $requiredStreak 题"
+    }
+
+    private fun showNextQuestion() {
+        val qs = QuizStore.questions(this)
+        if (qs.isEmpty()) {
+            Toast.makeText(this, "题库为空，请先导入题库", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        val idx = QuizStore.takeNext(this)
+        if (idx < 0 || idx >= qs.size) { finish(); return }
+        val q = qs[idx]
+        current = q
+        render(q)
+    }
+
+    private fun render(q: Question) {
+        stemView.text = if (q.isJudge) "【判断题】${q.stem}" else "【单选题】${q.stem}"
+        feedbackView.text = ""
+        updateProgress()
+        optionsBox.removeAllViews()
+
+        if (q.isJudge) {
+            // q.correct==1 表示答案为“正确”，==0 表示答案为“错误”
+            optionsBox.addView(makeOptionButton("正确", q.correct == 1, q))
+            optionsBox.addView(makeOptionButton("错误", q.correct == 0, q))
+        } else {
+            // 选项连内容一起随机打乱，正确答案跟随其文本移动
+            val items = ArrayList<Pair<String, Int>>()
+            for (i in q.options.indices) items.add(q.options[i] to i) // (文本, 原下标)
+            items.shuffle(Random.Default)
+            items.forEachIndexed { pos, pair ->
+                val letter = ('A' + pos)
+                val isCorrect = (pair.second == q.correct)
+                optionsBox.addView(
+                    makeOptionButton("$letter. ${pair.first}", isCorrect, q)
+                )
+            }
+        }
+    }
+
+    private fun makeOptionButton(label: String, isCorrect: Boolean, q: Question): Button {
+        val b = Button(this).apply {
+            text = label
+            textSize = 20f
+            isAllCaps = false
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) }
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setTextColor(Color.WHITE)
+        }
+        b.setOnClickListener {
+            if (isCorrect) {
+                correctCount++
+                updateProgress()
+                if (correctCount >= requiredStreak) {
+                    // 达成连对数：放行 + 重新计时
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 连对 ${requiredStreak} 题，继续看吧！"
+                    LockService.scheduleNext(this)
+                    Handler(Looper.getMainLooper()).postDelayed({ finish() }, 800)
+                } else {
+                    // 还需继续连对：追加下一道新题
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 答对了！再答对 ${requiredStreak - correctCount} 题即可解锁"
+                    showNextQuestion()
+                }
+            } else {
+                // 答错：连对清零，追加一道新题，仍锁屏
+                correctCount = 0
+                updateProgress()
+                feedbackView.setTextColor(Color.parseColor("#FF5B5B"))
+                val tip = if (q.analysis.isNotBlank())
+                    "❌ 答错了，计数清零。${q.analysis}  再来一题"
+                else "❌ 答错了，计数清零，再来一题"
+                feedbackView.text = tip
+                showNextQuestion()
+            }
+        }
+        return b
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_HOME) return true
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onBackPressed() { /* 禁用 */ }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+
+===== AlarmReceiver.kt =====
+package com.huiyang.quizlocktv
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+
+/**
+ * 每 N 分钟闹钟触发：拉起全屏锁屏出题页。
+ */
+class AlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { ctx.startActivity(lock) } catch (e: Exception) {}
+    }
+}
+
+===== BootReceiver.kt =====
+package com.huiyang.quizlocktv
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+
+/**
+ * 开机完成：启动前台服务（负责安排每 N 分钟弹窗），并立即弹"开机首题"。
+ */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val svc = Intent(ctx, LockService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(svc)
+            } else {
+                ctx.startService(svc)
+            }
+        } catch (e: Exception) { /* 个别 ROM 限制，忽略 */ }
+
+        // 开机先做一道题：从后台拉起锁屏页
+        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(QuizLockActivity.EXTRA_FIRST, true)
+        }
+        try { ctx.startActivity(lock) } catch (e: Exception) {}
+    }
+}
+
+===== ControlServer.kt =====
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.content.Intent
+import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import kotlin.concurrent.thread
+
+/**
+ * 内置局域网 HTTP 控制服务器：让同一 WiFi 下的手机/电脑用浏览器控制电视。
+ * 路由：
+ *   GET  /             -> 手机控制台网页(assets/console.html)
+ *   GET  /api/status   -> 当前题库数/间隔/连对/IP 的 JSON
+ *   POST /api/bank     -> body 为题库 JSON，校验后整库替换
+ *   POST /api/config   -> body: interval=10&streak=3，改弹窗间隔与连对数
+ *   POST /api/popup    -> 立即拉起全屏锁屏出题
+ * 纯 JDK ServerSocket 实现，不依赖第三方库，targetSdk30 无 cleartext 限制问题。
+ */
+class ControlServer(private val ctx: Context, private val port: Int = NetworkInfo.PORT) {
+
+    @Volatile private var running = false
+    private var server: ServerSocket? = null
+
+    fun start() {
+        if (running) return
+        running = true
+        thread(isDaemon = true) {
+            try {
+                server = ServerSocket().apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(port))
+                }
+                while (running) {
+                    val socket = try { server?.accept() ?: break } catch (e: Exception) { if (!running) break else continue }
+                    thread(isDaemon = true) { handle(socket) }
+                }
+            } catch (e: Exception) {
+                // 端口占用等，忽略
+            }
+        }
+    }
+
+    fun stop() {
+        running = false
+        runCatching { server?.close() }
+    }
+
+    private fun handle(socket: Socket) {
+        try {
+            socket.use { s ->
+                s.soTimeout = 8000
+                val input = s.getInputStream()
+                val output = s.getOutputStream()
+                val reader = input.reader(StandardCharsets.UTF_8).buffered()
+
+                val requestLine = reader.readLine() ?: return
+                val parts = requestLine.split(" ")
+                if (parts.size < 2) return
+                val method = parts[0]
+                val path = parts[1]
+
+                // 读头部，拿 Content-Length
+                var contentLength = 0
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isEmpty()) break
+                    if (line.lowercase().startsWith("content-length:")) {
+                        contentLength = line.substringAfter(":").trim().toIntOrNull() ?: 0
+                    }
+                }
+
+                val body = if (contentLength > 0) readNChars(reader, contentLength) else ""
+
+                route(method, path, body, output)
+            }
+        } catch (e: Exception) {
+            // 单次请求出错不影响服务
+        }
+    }
+
+    private fun readNChars(reader: BufferedReader, n: Int): String {
+        val buf = CharArray(n)
+        var read = 0
+        while (read < n) {
+            val r = reader.read(buf, read, n - read)
+            if (r == -1) break
+            read += r
+        }
+        return String(buf, 0, read)
+    }
+
+    private fun route(method: String, path: String, body: String, out: OutputStream) {
+        when {
+            method == "GET" && (path == "/" || path.startsWith("/index")) -> {
+                val html = readAsset("console.html")
+                send(out, 200, "text/html; charset=utf-8", html)
+            }
+            method == "GET" && path.startsWith("/api/status") -> {
+                send(out, 200, "application/json; charset=utf-8", statusJson())
+            }
+            method == "POST" && path.startsWith("/api/bank") -> {
+                handleBank(body, out)
+            }
+            method == "POST" && path.startsWith("/api/config") -> {
+                handleConfig(body, out)
+            }
+            method == "POST" && path.startsWith("/api/popup") -> {
+                handlePopup(out)
+            }
+            else -> send(out, 404, "text/plain; charset=utf-8", "not found")
+        }
+    }
+
+    private fun statusJson(): String {
+        val count = QuizStore.questions(ctx).size
+        val interval = QuizStore.getInterval(ctx)
+        val streak = QuizStore.getStreak(ctx)
+        return """{"count":$count,"interval":$interval,"streak":$streak,"ip":"${NetworkInfo.localIp()}","port":$port}"""
+    }
+
+    private fun handleBank(body: String, out: OutputStream) {
+        try {
+            val n = QuizParser.parse(body).size
+            QuizStore.saveRaw(ctx, body)
+            send(out, 200, "application/json; charset=utf-8", """{"ok":true,"count":$n}""")
+        } catch (e: Exception) {
+            send(out, 200, "application/json; charset=utf-8", """{"ok":false,"msg":"${jsonEsc(e.message ?: "格式错误")}"}""")
+        }
+    }
+
+    private fun handleConfig(body: String, out: OutputStream) {
+        val map = parseForm(body)
+        map["interval"]?.toIntOrNull()?.let { QuizStore.setInterval(ctx, it) }
+        map["streak"]?.toIntOrNull()?.let { QuizStore.setStreak(ctx, it) }
+        LockService.scheduleNext(ctx)
+        send(out, 200, "application/json; charset=utf-8", statusJson())
+    }
+
+    private fun handlePopup(out: OutputStream) {
+        val i = Intent(ctx, QuizLockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { ctx.startActivity(i) }
+        send(out, 200, "application/json; charset=utf-8", """{"ok":true}""")
+    }
+
+    // ---- 工具 ----
+    private fun send(out: OutputStream, code: Int, type: String, body: String) {
+        val bytes = body.toByteArray(StandardCharsets.UTF_8)
+        val status = if (code == 200) "200 OK" else "$code ERR"
+        val header = "HTTP/1.1 $status\r\n" +
+                "Content-Type: $type\r\n" +
+                "Content-Length: ${bytes.size}\r\n" +
+                "Cache-Control: no-store\r\n" +
+                "Connection: close\r\n\r\n"
+        out.write(header.toByteArray(StandardCharsets.US_ASCII))
+        out.write(bytes)
+        out.flush()
+    }
+
+    private fun readAsset(name: String): String {
+        return try {
+            ctx.assets.open(name).use { it.readBytes().toString(StandardCharsets.UTF_8) }
+        } catch (e: Exception) {
+            "控制台加载失败：${e.message}"
+        }
+    }
+
+    private fun parseForm(body: String): Map<String, String> {
+        val m = HashMap<String, String>()
+        body.split("&").forEach { kv ->
+            if (kv.contains("=")) {
+                val k = kv.substringBefore("=")
+                val v = kv.substringAfter("=")
+                m[k] = URLDecoder.decode(v, "UTF-8")
+            }
+        }
+        return m
+    }
+
+    private fun jsonEsc(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ")
+}
+
+===== LockService.kt =====
+package com.huiyang.quizlocktv
+
+import android.app.AlarmManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+
+/**
+ * 前台常驻服务：保证进程不被电视待机清理，并提供"答对解锁后重新计时 N 分钟"的闹钟调度。
+ * 计时起点 = 上一次答对解锁的时刻，符合"每满 N 分钟弹一题"。
+ */
+class LockService : Service() {
+
+    private var controlServer: ControlServer? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startAsForeground()
+        // 启动内置局域网控制服务器：同一 WiFi 下手机/电脑可远程放题与弹窗
+        controlServer = ControlServer(applicationContext).also { it.start() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { controlServer?.stop() }
+        controlServer = null
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startAsForeground()
+        scheduleNext(this)
+        return START_STICKY
+    }
+
+    private fun startAsForeground() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channelId = "quiz_lock_svc"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(channelId, "答题锁运行中", NotificationManager.IMPORTANCE_LOW)
+            nm.createNotificationChannel(ch)
+        }
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            Notification.Builder(this, channelId) else Notification.Builder(this)
+        val notification = builder
+            .setContentTitle("答题锁 TV")
+            .setContentText("运行中：答题后才能看电视")
+            .setSmallIcon(R.drawable.ic_launcher)
+            .build()
+        startForeground(1, notification)
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        private const val REQ = 1001
+
+        /** 安排 interval 分钟后弹出下一题。 */
+        fun scheduleNext(ctx: Context) {
+            val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi = pending(ctx)
+            val intervalMin = QuizStore.getInterval(ctx)
+            val triggerAt = System.currentTimeMillis() + intervalMin * 60_000L
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                } else {
+                    am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                }
+            } catch (e: SecurityException) {
+                am.set(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+            }
+        }
+
+        private fun pending(ctx: Context): PendingIntent {
+            val i = Intent(ctx, AlarmReceiver::class.java)
+            val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            else PendingIntent.FLAG_UPDATE_CURRENT
+            return PendingIntent.getBroadcast(ctx, REQ, i, flag)
+        }
+    }
+}
+
+===== MainActivity.kt =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+/**
+ * 管理主页 = 题库入口。
+ * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+ * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+ * 另：设置出题间隔、测试锁屏。
+ */
+class MainActivity : Activity() {
+
+    private lateinit var statusView: TextView
+    private lateinit var intervalLabel: TextView
+    private lateinit var streakLabel: TextView
+    private lateinit var pasteInput: EditText
+    private lateinit var urlInput: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        buildLayout()
+        refreshStatus()
+        startServiceAndSchedule()
+    }
+
+    private fun startServiceAndSchedule() {
+        val svc = Intent(this, LockService::class.java)
+        runCatching { startForegroundService(svc) }
+            .onFailure { runCatching { startService(svc) } }
+        LockService.scheduleNext(this)
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+        }
+
+        col.addView(header("答题锁 TV"))
+
+        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+        col.addView(TextView(this).apply {
+            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+            textSize = 16f
+            setTextColor(Color.parseColor("#1f6feb"))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#0B2A4A"))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+
+        statusView = TextView(this).apply {
+            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+            setPadding(0, dp(6), 0, dp(16))
+        }
+        col.addView(statusView)
+
+        // 间隔设置
+        col.addView(subhead("每看几分钟弹一题："))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+        row.addView(intervalLabel)
+        row.addView(btn("+1", 1f) { bumpInterval(1) })
+        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+        col.addView(row)
+
+        // 防乱点：需连续答对几题才解锁
+        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+        rowS.addView(streakLabel)
+        rowS.addView(btn("+1", 1f) { bumpStreak(1) })
+        rowS.addView(btn("设为3", 1.5f) { setStreak(3) })
+        col.addView(rowS)
+
+        // 入口A
+        col.addView(subhead("【入口A】粘贴导入题库 JSON："))
+        pasteInput = EditText(this).apply {
+            hint = "把 AI 生成的题库 JSON 粘贴到这里（需含 questions 数组）"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            minHeight = dp(120)
+            gravity = Gravity.TOP or Gravity.START
+        }
+        col.addView(pasteInput)
+        col.addView(btnFull("保存并导入") { importFromPaste() })
+
+        // 入口B
+        col.addView(subhead("【入口B】题库链接自动同步："))
+        urlInput = EditText(this).apply {
+            hint = "填公开可读的 .json 地址，如 https://…/题库.json"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setText(QuizStore.getSyncUrl(this@MainActivity))
+        }
+        col.addView(urlInput)
+        val rowB = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowB.addView(btn("保存地址", 1f) { saveUrl() })
+        rowB.addView(btn("立即同步", 1f) { doSync() })
+        col.addView(rowB)
+
+        // 测试
+        col.addView(btnFull("测试：立即弹一道题") {
+            if (QuizStore.hasBank(this)) {
+                startActivity(Intent(this, QuizLockActivity::class.java))
+            } else {
+                Toast.makeText(this, "还没有题库，先用入口A/B放题", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        root.addView(col)
+        setContentView(root)
+    }
+
+    // ---- 业务动作 ----
+    private fun bumpInterval(delta: Int) {
+        val v = (QuizStore.getInterval(this) + delta).coerceIn(1, 1440)
+        setInterval(v)
+    }
+
+    private fun setInterval(v: Int) {
+        QuizStore.setInterval(this, v)
+        LockService.scheduleNext(this)
+        refreshStatus()
+    }
+
+    private fun bumpStreak(delta: Int) {
+        setStreak((QuizStore.getStreak(this) + delta).coerceIn(1, 10))
+    }
+
+    private fun setStreak(v: Int) {
+        QuizStore.setStreak(this, v)
+        streakLabel.text = v.toString()
+        refreshStatus()
+    }
+
+    private fun importFromPaste() {
+        val text = pasteInput.text.toString()
+        if (text.isBlank()) { Toast.makeText(this, "请先粘贴内容", Toast.LENGTH_SHORT).show(); return }
+        try {
+            val n = QuizParser.parse(text).size
+            QuizStore.saveRaw(this, text)
+            Toast.makeText(this, "导入成功，共 $n 题", Toast.LENGTH_LONG).show()
+            pasteInput.setText("")
+            refreshStatus()
+        } catch (e: Exception) {
+            Toast.makeText(this, "格式有误：${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveUrl() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        Toast.makeText(this, "同步地址已保存", Toast.LENGTH_SHORT).show()
+        refreshStatus()
+    }
+
+    private fun doSync() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        QuizSync.fetchNow(this, object : QuizSync.Result {
+            override fun onDone(ok: Boolean, msg: String) {
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                if (ok) refreshStatus()
+            }
+        })
+    }
+
+    private fun refreshStatus() {
+        val count = QuizStore.questions(this).size
+        intervalLabel.text = QuizStore.getInterval(this).toString()
+        val last = QuizStore.getLastSync(this)
+        val lastStr = if (last == 0L) "从未同步"
+        else "上次同步 ${android.text.format.DateFormat.getDateFormat(this).format(java.util.Date(last))}"
+        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　连对 ${QuizStore.getStreak(this)} 题解锁　|　$lastStr"
+    }
+
+    // ---- 小工具 ----
+    private fun header(t: String) = TextView(this).apply {
+        text = t; textSize = 26f; setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.parseColor("#2BB673"))
+    }
+
+    private fun subhead(t: String) = TextView(this).apply {
+        text = t; textSize = 17f; setTextColor(Color.WHITE)
+        setPadding(0, dp(18), 0, dp(8))
+    }
+
+    private fun labelView(t: String, w: Float) = TextView(this).apply {
+        text = t; textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+    }
+
+    private fun btn(t: String, w: Float, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 15f
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+        setBackgroundColor(Color.parseColor("#16243B")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun btnFull(t: String, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 18f
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
+        ).apply { topMargin = dp(12) }
+        setBackgroundColor(Color.parseColor("#0F8A4F")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+===== MainActivity.kt.bak =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+/**
+ * 管理主页 = 题库入口。
+ * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+ * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+ * 另：设置出题间隔、测试锁屏。
+ */
+class MainActivity : Activity() {
+
+    private lateinit var statusView: TextView
+    private lateinit var intervalLabel: TextView
+    private lateinit var streakLabel: TextView
+    private lateinit var pasteInput: EditText
+    private lateinit var urlInput: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        buildLayout()
+        refreshStatus()
+        startServiceAndSchedule()
+    }
+
+    private fun startServiceAndSchedule() {
+        val svc = Intent(this, LockService::class.java)
+        runCatching { startForegroundService(svc) }
+            .onFailure { runCatching { startService(svc) } }
+        LockService.scheduleNext(this)
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+        }
+
+        col.addView(header("答题锁 TV"))
+
+        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+        col.addView(TextView(this).apply {
+            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+            textSize = 16f
+            setTextColor(Color.parseColor("#1f6feb"))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#0B2A4A"))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+
+        statusView = TextView(this).apply {
+            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+            setPadding(0, dp(6), 0, dp(16))
+        }
+        col.addView(statusView)
+
+        // 间隔设置
+        col.addView(subhead("每看几分钟弹一题："))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+        row.addView(intervalLabel)
+        row.addView(btn("+1", 1f) { bumpInterval(1) })
+        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+        col.addView(row)
+
+        // 防乱点：需连续答对几题才解锁
+        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+        rowS.addView(streakLabel)
+        rowS.addView(btn("+1", 1f) { bumpStreak(1) })
+        rowS.addView(btn("设为3", 1.5f) { setStreak(3) })
+        col.addView(rowS)
+
+        // 入口A
+        col.addView(subhead("【入口A】粘贴导入题库 JSON："))
+        pasteInput = EditText(this).apply {
+            hint = "把 AI 生成的题库 JSON 粘贴到这里（需含 questions 数组）"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            minHeight = dp(120)
+            gravity = Gravity.TOP or Gravity.START
+        }
+        col.addView(pasteInput)
+        col.addView(btnFull("保存并导入") { importFromPaste() })
+
+        // 入口B
+        col.addView(subhead("【入口B】题库链接自动同步："))
+        urlInput = EditText(this).apply {
+            hint = "填公开可读的 .json 地址，如 https://…/题库.json"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setText(QuizStore.getSyncUrl(this@MainActivity))
+        }
+        col.addView(urlInput)
+        val rowB = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowB.addView(btn("保存地址", 1f) { saveUrl() })
+        rowB.addView(btn("立即同步", 1f) { doSync() })
+        col.addView(rowB)
+
+        // 测试
+        col.addView(btnFull("测试：立即弹一道题") {
+            if (QuizStore.hasBank(this)) {
+                startActivity(Intent(this, QuizLockActivity::class.java))
+            } else {
+                Toast.makeText(this, "还没有题库，先用入口A/B放题", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        root.addView(col)
+        setContentView(root)
+    }
+
+    // ---- 业务动作 ----
+    private fun bumpInterval(delta: Int) {
+        val v = (QuizStore.getInterval(this) + delta).coerceIn(1, 1440)
+        setInterval(v)
+    }
+
+    private fun setInterval(v: Int) {
+        QuizStore.setInterval(this, v)
+        LockService.scheduleNext(this)
+        refreshStatus()
+    }
+
+    private fun bumpStreak(delta: Int) {
+        setStreak((QuizStore.getStreak(this) + delta).coerceIn(1, 10))
+    }
+
+    private fun setStreak(v: Int) {
+        QuizStore.setStreak(this, v)
+        streakLabel.text = v.toString()
+        refreshStatus()
+    }
+
+    private fun importFromPaste() {
+        val text = pasteInput.text.toString()
+        if (text.isBlank()) { Toast.makeText(this, "请先粘贴内容", Toast.LENGTH_SHORT).show(); return }
+        try {
+            val n = QuizParser.parse(text).size
+            QuizStore.saveRaw(this, text)
+            Toast.makeText(this, "导入成功，共 $n 题", Toast.LENGTH_LONG).show()
+            pasteInput.setText("")
+            refreshStatus()
+        } catch (e: Exception) {
+            Toast.makeText(this, "格式有误：${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveUrl() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        Toast.makeText(this, "同步地址已保存", Toast.LENGTH_SHORT).show()
+        refreshStatus()
+    }
+
+    private fun doSync() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        QuizSync.fetchNow(this, object : QuizSync.Result {
+            override fun onDone(ok: Boolean, msg: String) {
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                if (ok) refreshStatus()
+            }
+        })
+    }
+
+    private fun refreshStatus() {
+        val count = QuizStore.questions(this).size
+        intervalLabel.text = QuizStore.getInterval(this).toString()
+        val last = QuizStore.getLastSync(this)
+        val lastStr = if (last == 0L) "从未同步"
+        else "上次同步 ${android.text.format.DateFormat.getDateFormat(this).format(java.util.Date(last))}"
+        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　连对 ${QuizStore.getStreak(this)} 题解锁　|　$lastStr"
+    }
+
+    // ---- 小工具 ----
+    private fun header(t: String) = TextView(this).apply {
+        text = t; textSize = 26f; setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.parseColor("#2BB673"))
+    }
+
+    private fun subhead(t: String) = TextView(this).apply {
+        text = t; textSize = 17f; setTextColor(Color.WHITE)
+        setPadding(0, dp(18), 0, dp(8))
+    }
+
+    private fun labelView(t: String, w: Float) = TextView(this).apply {
+        text = t; textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+    }
+
+    private fun btn(t: String, w: Float, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 15f
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+        setBackgroundColor(Color.parseColor("#16243B")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun btnFull(t: String, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 18f
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
+        ).apply { topMargin = dp(12) }
+        setBackgroundColor(Color.parseColor("#0F8A4F")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+===== MainActivity.kt.preui =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+/**
+ * 管理主页 = 题库入口。
+ * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+ * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+ * 另：设置出题间隔、测试锁屏。
+ */
+class MainActivity : Activity() {
+
+    private lateinit var statusView: TextView
+    private lateinit var intervalLabel: TextView
+    private lateinit var streakLabel: TextView
+    private lateinit var pasteInput: EditText
+    private lateinit var urlInput: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        buildLayout()
+        refreshStatus()
+        startServiceAndSchedule()
+    }
+
+    private fun startServiceAndSchedule() {
+        val svc = Intent(this, LockService::class.java)
+        runCatching { startForegroundService(svc) }
+            .onFailure { runCatching { startService(svc) } }
+        LockService.scheduleNext(this)
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+        }
+
+        col.addView(header("答题锁 TV"))
+
+        // 手机控制台地址（同一WiFi下手机浏览器打开即可远程控制）
+        col.addView(TextView(this).apply {
+            text = "📱 手机控制台（同WiFi下手机浏览器打开）：\n" + NetworkInfo.consoleUrl()
+            textSize = 16f
+            setTextColor(Color.parseColor("#1f6feb"))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#0B2A4A"))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+
+        statusView = TextView(this).apply {
+            textSize = 16f; setTextColor(Color.parseColor("#9FB0CC"))
+            setPadding(0, dp(6), 0, dp(16))
+        }
+        col.addView(statusView)
+
+        // 间隔设置
+        col.addView(subhead("每看几分钟弹一题："))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(btn("-1", 1f) { bumpInterval(-1) })
+        intervalLabel = labelView(QuizStore.getInterval(this).toString(), 1f)
+        row.addView(intervalLabel)
+        row.addView(btn("+1", 1f) { bumpInterval(1) })
+        row.addView(btn("设为10", 1.5f) { setInterval(10) })
+        col.addView(row)
+
+        // 防乱点：需连续答对几题才解锁
+        col.addView(subhead("需连续答对几题才解锁（越大越难乱点）："))
+        val rowS = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowS.addView(btn("-1", 1f) { bumpStreak(-1) })
+        streakLabel = labelView(QuizStore.getStreak(this).toString(), 1f)
+        rowS.addView(streakLabel)
+        rowS.addView(btn("+1", 1f) { bumpStreak(1) })
+        rowS.addView(btn("设为3", 1.5f) { setStreak(3) })
+        col.addView(rowS)
+
+        // 入口A
+        col.addView(subhead("【入口A】粘贴导入题库 JSON："))
+        pasteInput = EditText(this).apply {
+            hint = "把 AI 生成的题库 JSON 粘贴到这里（需含 questions 数组）"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            minHeight = dp(120)
+            gravity = Gravity.TOP or Gravity.START
+        }
+        col.addView(pasteInput)
+        col.addView(btnFull("保存并导入") { importFromPaste() })
+
+        // 入口B
+        col.addView(subhead("【入口B】题库链接自动同步："))
+        urlInput = EditText(this).apply {
+            hint = "填公开可读的 .json 地址，如 https://…/题库.json"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6B7A93"))
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setText(QuizStore.getSyncUrl(this@MainActivity))
+        }
+        col.addView(urlInput)
+        val rowB = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rowB.addView(btn("保存地址", 1f) { saveUrl() })
+        rowB.addView(btn("立即同步", 1f) { doSync() })
+        col.addView(rowB)
+
+        // 测试
+        col.addView(btnFull("测试：立即弹一道题") {
+            if (QuizStore.hasBank(this)) {
+                startActivity(Intent(this, QuizLockActivity::class.java))
+            } else {
+                Toast.makeText(this, "还没有题库，先用入口A/B放题", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        root.addView(col)
+        setContentView(root)
+    }
+
+    // ---- 业务动作 ----
+    private fun bumpInterval(delta: Int) {
+        val v = (QuizStore.getInterval(this) + delta).coerceIn(1, 1440)
+        setInterval(v)
+    }
+
+    private fun setInterval(v: Int) {
+        QuizStore.setInterval(this, v)
+        LockService.scheduleNext(this)
+        refreshStatus()
+    }
+
+    private fun bumpStreak(delta: Int) {
+        setStreak((QuizStore.getStreak(this) + delta).coerceIn(1, 10))
+    }
+
+    private fun setStreak(v: Int) {
+        QuizStore.setStreak(this, v)
+        streakLabel.text = v.toString()
+        refreshStatus()
+    }
+
+    private fun importFromPaste() {
+        val text = pasteInput.text.toString()
+        if (text.isBlank()) { Toast.makeText(this, "请先粘贴内容", Toast.LENGTH_SHORT).show(); return }
+        try {
+            val n = QuizParser.parse(text).size
+            QuizStore.saveRaw(this, text)
+            Toast.makeText(this, "导入成功，共 $n 题", Toast.LENGTH_LONG).show()
+            pasteInput.setText("")
+            refreshStatus()
+        } catch (e: Exception) {
+            Toast.makeText(this, "格式有误：${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveUrl() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        Toast.makeText(this, "同步地址已保存", Toast.LENGTH_SHORT).show()
+        refreshStatus()
+    }
+
+    private fun doSync() {
+        QuizStore.setSyncUrl(this, urlInput.text.toString())
+        QuizSync.fetchNow(this, object : QuizSync.Result {
+            override fun onDone(ok: Boolean, msg: String) {
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                if (ok) refreshStatus()
+            }
+        })
+    }
+
+    private fun refreshStatus() {
+        val count = QuizStore.questions(this).size
+        intervalLabel.text = QuizStore.getInterval(this).toString()
+        val last = QuizStore.getLastSync(this)
+        val lastStr = if (last == 0L) "从未同步"
+        else "上次同步 ${android.text.format.DateFormat.getDateFormat(this).format(java.util.Date(last))}"
+        statusView.text = "当前题库：$count 题　|　间隔 ${QuizStore.getInterval(this)} 分钟　|　连对 ${QuizStore.getStreak(this)} 题解锁　|　$lastStr"
+    }
+
+    // ---- 小工具 ----
+    private fun header(t: String) = TextView(this).apply {
+        text = t; textSize = 26f; setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.parseColor("#2BB673"))
+    }
+
+    private fun subhead(t: String) = TextView(this).apply {
+        text = t; textSize = 17f; setTextColor(Color.WHITE)
+        setPadding(0, dp(18), 0, dp(8))
+    }
+
+    private fun labelView(t: String, w: Float) = TextView(this).apply {
+        text = t; textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+    }
+
+    private fun btn(t: String, w: Float, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 15f
+        layoutParams = LinearLayout.LayoutParams(0, dp(48), w)
+        setBackgroundColor(Color.parseColor("#16243B")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun btnFull(t: String, onClick: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 18f
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
+        ).apply { topMargin = dp(12) }
+        setBackgroundColor(Color.parseColor("#0F8A4F")); setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+===== NetworkInfo.kt =====
+package com.huiyang.quizlocktv
+
+import java.net.NetworkInterface
+
+/** 获取电视在局域网里的 IPv4 地址（手机据此访问控制台）。 */
+object NetworkInfo {
+    const val PORT = 8770
+
+    fun localIp(): String {
+        try {
+            val en = NetworkInterface.getNetworkInterfaces()
+            for (intf in en) {
+                if (!intf.isUp || intf.isLoopback) continue
+                for (addr in intf.inetAddresses) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") != true) {
+                        return addr.hostAddress ?: ""
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "未知"
+    }
+
+    /** 手机浏览器要访问的完整地址，如 http://192.168.1.50:8770 */
+    fun consoleUrl(): String = "http://${localIp()}:$PORT"
+}
+
+===== Question.kt =====
+package com.huiyang.quizlocktv
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * 一道题。
+ * type = "single"(单选) 或 "judge"(判断)
+ * correct: single=正确选项下标(0基)；judge=0表示错误/false, 1表示正确/true
+ */
+data class Question(
+    val type: String,
+    val stem: String,
+    val options: List<String>,   // 判断题为空列表
+    val correct: Int,
+    val analysis: String
+) {
+    val isJudge get() = type == "judge"
+}
+
+object QuizParser {
+    /** 解析题库 JSON，返回题目列表；格式错误时抛 IllegalArgumentException */
+    fun parse(text: String): List<Question> {
+        val root = JSONObject(text.trim())
+        val arr = root.optJSONArray("questions")
+            ?: throw IllegalArgumentException("缺少 questions 数组")
+        val list = ArrayList<Question>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val type = o.optString("type")
+            val stem = o.optString("stem")
+            if (stem.isBlank()) continue
+            when (type) {
+                "single" -> {
+                    val opts = ArrayList<String>()
+                    val oa = o.optJSONArray("options") ?: JSONArray()
+                    for (k in 0 until oa.length()) opts.add(oa.getString(k))
+                    if (opts.isEmpty()) continue
+                    val ans = o.optInt("answer", -1)
+                    if (ans < 0 || ans >= opts.size) continue
+                    list.add(Question(type, stem, opts, ans, o.optString("analysis")))
+                }
+                "judge" -> {
+                    val ans = if (o.optBoolean("answer", false)) 1 else 0
+                    list.add(Question(type, stem, emptyList(), ans, o.optString("analysis")))
+                }
+                else -> { /* 跳过未知题型 */ }
+            }
+        }
+        if (list.isEmpty()) throw IllegalArgumentException("没有解析到任何有效题目，请检查 JSON 格式")
+        return list
+    }
+}
+
+===== QuizLockActivity.kt =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import kotlin.random.Random
+
+/**
+ * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+ * 防乱点两道防线：
+ *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+ *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+ * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+ */
+class QuizLockActivity : Activity() {
+
+    companion object {
+        const val EXTRA_FIRST = "first"
+    }
+
+    private lateinit var stemView: TextView
+    private lateinit var feedbackView: TextView
+    private lateinit var progressView: TextView
+    private lateinit var optionsBox: LinearLayout
+
+    private var requiredStreak = 3
+    private var correctCount = 0
+    private var current: Question? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SECURE or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
+        requiredStreak = QuizStore.getStreak(this)
+        correctCount = 0
+        buildLayout()
+        showNextQuestion()
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val title = TextView(this).apply {
+            text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#2BB673"))
+            gravity = Gravity.CENTER
+        }
+
+        progressView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#9FB0CC"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(4))
+        }
+
+        stemView = TextView(this).apply {
+            textSize = 26f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(0, dp(16), 0, dp(16))
+        }
+
+        optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        feedbackView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#FF5B5B"))
+            setPadding(0, dp(16), 0, dp(8))
+        }
+
+        col.addView(title)
+        col.addView(progressView)
+        col.addView(stemView)
+        col.addView(optionsBox)
+        col.addView(feedbackView)
+        root.addView(col)
+        setContentView(root)
+        updateProgress()
+    }
+
+    private fun updateProgress() {
+        progressView.text = "已连续答对 $correctCount / $requiredStreak 题"
+    }
+
+    private fun showNextQuestion() {
+        val qs = QuizStore.questions(this)
+        if (qs.isEmpty()) {
+            Toast.makeText(this, "题库为空，请先导入题库", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        val idx = QuizStore.takeNext(this)
+        if (idx < 0 || idx >= qs.size) { finish(); return }
+        val q = qs[idx]
+        current = q
+        render(q)
+    }
+
+    private fun render(q: Question) {
+        stemView.text = if (q.isJudge) "【判断题】${q.stem}" else "【单选题】${q.stem}"
+        feedbackView.text = ""
+        updateProgress()
+        optionsBox.removeAllViews()
+
+        if (q.isJudge) {
+            // q.correct==1 表示答案为“正确”，==0 表示答案为“错误”
+            optionsBox.addView(makeOptionButton("正确", q.correct == 1, q))
+            optionsBox.addView(makeOptionButton("错误", q.correct == 0, q))
+        } else {
+            // 选项连内容一起随机打乱，正确答案跟随其文本移动
+            val items = ArrayList<Pair<String, Int>>()
+            for (i in q.options.indices) items.add(q.options[i] to i) // (文本, 原下标)
+            items.shuffle(Random.Default)
+            items.forEachIndexed { pos, pair ->
+                val letter = ('A' + pos)
+                val isCorrect = (pair.second == q.correct)
+                optionsBox.addView(
+                    makeOptionButton("$letter. ${pair.first}", isCorrect, q)
+                )
+            }
+        }
+    }
+
+    private fun makeOptionButton(label: String, isCorrect: Boolean, q: Question): Button {
+        val b = Button(this).apply {
+            text = label
+            textSize = 20f
+            isAllCaps = false
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) }
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setTextColor(Color.WHITE)
+        }
+        b.setOnClickListener {
+            if (isCorrect) {
+                correctCount++
+                updateProgress()
+                if (correctCount >= requiredStreak) {
+                    // 达成连对数：放行 + 重新计时
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 连对 ${requiredStreak} 题，继续看吧！"
+                    LockService.scheduleNext(this)
+                    Handler(Looper.getMainLooper()).postDelayed({ finish() }, 800)
+                } else {
+                    // 还需继续连对：追加下一道新题
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 答对了！再答对 ${requiredStreak - correctCount} 题即可解锁"
+                    showNextQuestion()
+                }
+            } else {
+                // 答错：连对清零，追加一道新题，仍锁屏
+                correctCount = 0
+                updateProgress()
+                feedbackView.setTextColor(Color.parseColor("#FF5B5B"))
+                val tip = if (q.analysis.isNotBlank())
+                    "❌ 答错了，计数清零。${q.analysis}  再来一题"
+                else "❌ 答错了，计数清零，再来一题"
+                feedbackView.text = tip
+                showNextQuestion()
+            }
+        }
+        return b
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_HOME) return true
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onBackPressed() { /* 禁用 */ }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+
+
+===== QuizLockActivity.kt.preui =====
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import kotlin.random.Random
+
+/**
+ * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+ * 防乱点两道防线：
+ *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+ *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+ * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+ */
+class QuizLockActivity : Activity() {
+
+    companion object {
+        const val EXTRA_FIRST = "first"
+    }
+
+    private lateinit var stemView: TextView
+    private lateinit var feedbackView: TextView
+    private lateinit var progressView: TextView
+    private lateinit var optionsBox: LinearLayout
+
+    private var requiredStreak = 3
+    private var correctCount = 0
+    private var current: Question? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SECURE or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
+        requiredStreak = QuizStore.getStreak(this)
+        correctCount = 0
+        buildLayout()
+        showNextQuestion()
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val title = TextView(this).apply {
+            text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#2BB673"))
+            gravity = Gravity.CENTER
+        }
+
+        progressView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#9FB0CC"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(4))
+        }
+
+        stemView = TextView(this).apply {
+            textSize = 26f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(0, dp(16), 0, dp(16))
+        }
+
+        optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        feedbackView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#FF5B5B"))
+            setPadding(0, dp(16), 0, dp(8))
+        }
+
+        col.addView(title)
+        col.addView(progressView)
+        col.addView(stemView)
+        col.addView(optionsBox)
+        col.addView(feedbackView)
+        root.addView(col)
+        setContentView(root)
+        updateProgress()
+    }
+
+    private fun updateProgress() {
+        progressView.text = "已连续答对 $correctCount / $requiredStreak 题"
+    }
+
+    private fun showNextQuestion() {
+        val qs = QuizStore.questions(this)
+        if (qs.isEmpty()) {
+            Toast.makeText(this, "题库为空，请先导入题库", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        val idx = QuizStore.takeNext(this)
+        if (idx < 0 || idx >= qs.size) { finish(); return }
+        val q = qs[idx]
+        current = q
+        render(q)
+    }
+
+    private fun render(q: Question) {
+        stemView.text = if (q.isJudge) "【判断题】${q.stem}" else "【单选题】${q.stem}"
+        feedbackView.text = ""
+        updateProgress()
+        optionsBox.removeAllViews()
+
+        if (q.isJudge) {
+            // q.correct==1 表示答案为“正确”，==0 表示答案为“错误”
+            optionsBox.addView(makeOptionButton("正确", q.correct == 1, q))
+            optionsBox.addView(makeOptionButton("错误", q.correct == 0, q))
+        } else {
+            // 选项连内容一起随机打乱，正确答案跟随其文本移动
+            val items = ArrayList<Pair<String, Int>>()
+            for (i in q.options.indices) items.add(q.options[i] to i) // (文本, 原下标)
+            items.shuffle(Random.Default)
+            items.forEachIndexed { pos, pair ->
+                val letter = ('A' + pos)
+                val isCorrect = (pair.second == q.correct)
+                optionsBox.addView(
+                    makeOptionButton("$letter. ${pair.first}", isCorrect, q)
+                )
+            }
+        }
+    }
+
+    private fun makeOptionButton(label: String, isCorrect: Boolean, q: Question): Button {
+        val b = Button(this).apply {
+            text = label
+            textSize = 20f
+            isAllCaps = false
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) }
+            setBackgroundColor(Color.parseColor("#16243B"))
+            setTextColor(Color.WHITE)
+        }
+        b.setOnClickListener {
+            if (isCorrect) {
+                correctCount++
+                updateProgress()
+                if (correctCount >= requiredStreak) {
+                    // 达成连对数：放行 + 重新计时
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 连对 ${requiredStreak} 题，继续看吧！"
+                    LockService.scheduleNext(this)
+                    Handler(Looper.getMainLooper()).postDelayed({ finish() }, 800)
+                } else {
+                    // 还需继续连对：追加下一道新题
+                    feedbackView.setTextColor(Color.parseColor("#2BB673"))
+                    feedbackView.text = "✅ 答对了！再答对 ${requiredStreak - correctCount} 题即可解锁"
+                    showNextQuestion()
+                }
+            } else {
+                // 答错：连对清零，追加一道新题，仍锁屏
+                correctCount = 0
+                updateProgress()
+                feedbackView.setTextColor(Color.parseColor("#FF5B5B"))
+                val tip = if (q.analysis.isNotBlank())
+                    "❌ 答错了，计数清零。${q.analysis}  再来一题"
+                else "❌ 答错了，计数清零，再来一题"
+                feedbackView.text = tip
+                showNextQuestion()
+            }
+        }
+        return b
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_HOME) return true
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onBackPressed() { /* 禁用 */ }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
+
+
+===== QuizStore.kt =====
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.content.SharedPreferences
+
+/**
+ * 用 SharedPreferences 保存：题库原文、当前进度指针、出题间隔、同步地址、上次同步时间。
+ * 题库以 JSON 字符串整体存储，解析结果缓存到内存。
+ */
+object QuizStore {
+    private const val PREF = "quiz_lock_pref"
+    private const val KEY_RAW = "quiz_raw_json"        // 题库原文 JSON
+    private const val KEY_POINTER = "pointer"          // 当前出到第几题（循环推进）
+    private const val KEY_INTERVAL = "interval_min"    // 弹窗间隔(分钟)
+    private const val KEY_URL = "sync_url"             // 入口B：自动同步地址
+    private const val KEY_LAST_SYNC = "last_sync"      // 上次同步成功时间戳
+    private const val KEY_STREAK = "required_streak"   // 需连续答对几题才解锁（防乱点）
+
+    private var cache: List<Question>? = null
+
+    private fun sp(c: Context): SharedPreferences =
+        c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
+    // ---- 题库读写 ----
+    fun saveRaw(c: Context, rawJson: String) {
+        sp(c).edit().putString(KEY_RAW, rawJson).putInt(KEY_POINTER, 0).apply()
+        cache = null // 题库更新，重置缓存与进度
+    }
+
+    fun currentRaw(c: Context): String = sp(c).getString(KEY_RAW, "") ?: ""
+
+    fun questions(c: Context): List<Question> {
+        cache?.let { return it }
+        val raw = currentRaw(c)
+        val parsed = if (raw.isBlank()) emptyList() else
+            try { QuizParser.parse(raw) } catch (e: Exception) { emptyList() }
+        cache = parsed
+        return parsed
+    }
+
+    fun hasBank(c: Context): Boolean = questions(c).isNotEmpty()
+
+    /**
+     * 取下一道未出过的题：返回当前指针下标，并把指针循环推进到下一题。
+     * 首次弹出和答错后追加新题都调用本方法，保证每次都是不同的题、不重复。
+     */
+    fun takeNext(c: Context): Int {
+        val n = questions(c).size
+        if (n == 0) return -1
+        val p = sp(c).getInt(KEY_POINTER, 0) % n
+        sp(c).edit().putInt(KEY_POINTER, (p + 1) % n).apply()
+        return p
+    }
+
+    // ---- 配置 ----
+    fun setInterval(c: Context, min: Int) {
+        sp(c).edit().putInt(KEY_INTERVAL, min.coerceIn(1, 1440)).apply()
+    }
+    fun getInterval(c: Context): Int = sp(c).getInt(KEY_INTERVAL, 10)
+
+    fun setSyncUrl(c: Context, url: String) {
+        sp(c).edit().putString(KEY_URL, url.trim()).apply()
+    }
+    fun getSyncUrl(c: Context): String = sp(c).getString(KEY_URL, "") ?: ""
+
+    fun setLastSync(c: Context, t: Long) {
+        sp(c).edit().putLong(KEY_LAST_SYNC, t).apply()
+    }
+    fun getLastSync(c: Context): Long = sp(c).getLong(KEY_LAST_SYNC, 0L)
+
+    /** 解锁所需连续答对题数，默认 3，可设 1~10。设越大越难靠蒙混过关。 */
+    fun setStreak(c: Context, n: Int) {
+        sp(c).edit().putInt(KEY_STREAK, n.coerceIn(1, 10)).apply()
+    }
+    fun getStreak(c: Context): Int = sp(c).getInt(KEY_STREAK, 3)
+}
+
+===== QuizSync.kt =====
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import java.net.HttpURLConnection
+import java.net.URL
+
+/**
+ * 入口B：从用户填的 URL 拉取题库 JSON。fetchNow 内部自起后台线程，回调在主线程。
+ */
+object QuizSync {
+    interface Result {
+        fun onDone(ok: Boolean, msg: String)
+    }
+
+    /** 同步：拉取 URL，成功且能解析则替换本地题库。 */
+    fun fetchNow(ctx: Context, result: Result?) {
+        val url = QuizStore.getSyncUrl(ctx)
+        Thread {
+            if (url.isBlank()) {
+                post(result, false, "未设置同步地址")
+                return@Thread
+            }
+            try {
+                val text = httpGet(url)
+                if (text == null) {
+                    post(result, false, "无法访问地址（检查网络/链接是否公开可读）")
+                    return@Thread
+                }
+                // 先验证能解析成题库，再入库
+                QuizParser.parse(text)
+                QuizStore.saveRaw(ctx, text)
+                QuizStore.setLastSync(ctx, System.currentTimeMillis())
+                post(result, true, "同步成功，题库已更新")
+            } catch (e: Exception) {
+                post(result, false, "同步失败：${e.message}")
+            }
+        }.start()
+    }
+
+    private fun httpGet(u: String): String? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(u).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 10000
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+            }
+            if (conn.responseCode in 200..299) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else null
+        } catch (e: Exception) {
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun post(r: Result?, ok: Boolean, msg: String) {
+        Handler(Looper.getMainLooper()).post { r?.onDone(ok, msg) }
+    }
+}
+

@@ -1,0 +1,176 @@
+  25:  */
+  26: class QuizLockActivity : Activity() {
+  27: 
+  28:     companion object {
+  29:         const val EXTRA_FIRST = "first"
+  30:     }
+  31: 
+  32:     private lateinit var stemView: TextView
+  33:     private lateinit var feedbackView: TextView
+  34:     private lateinit var progressView: TextView
+  35:     private lateinit var optionsBox: LinearLayout
+  36: 
+  37:     private var requiredStreak = 3
+  38:     private var correctCount = 0
+  39:     private var current: Question? = null
+  40: 
+  41:     override fun onCreate(savedInstanceState: Bundle?) {
+  42:         super.onCreate(savedInstanceState)
+  43:         window.addFlags(
+  44:             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+  45:             WindowManager.LayoutParams.FLAG_SECURE or
+  46:             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+  47:             WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+  48:             WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+  49:         )
+  50:         requiredStreak = QuizStore.getStreak(this)
+  51:         correctCount = 0
+  52:         buildLayout()
+  53:         showNextQuestion()
+  54:     }
+  55: 
+  56:     private fun buildLayout() {
+  57:         val root = ScrollView(this).apply {
+  58:             setBackgroundColor(Color.parseColor("#0B1220"))
+  59:             isFillViewport = true
+  60:         }
+  61:         val col = LinearLayout(this).apply {
+  62:             orientation = LinearLayout.VERTICAL
+  63:             setPadding(dp(28), dp(28), dp(28), dp(28))
+  64:             gravity = Gravity.CENTER_HORIZONTAL
+  65:         }
+  66: 
+  67:         val title = TextView(this).apply {
+  68:             text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+  69:             textSize = 22f
+  70:             setTypeface(typeface, Typeface.BOLD)
+  71:             setTextColor(Color.parseColor("#2BB673"))
+  72:             gravity = Gravity.CENTER
+  73:         }
+  74: 
+  75:         progressView = TextView(this).apply {
+  76:             textSize = 18f
+  77:             setTextColor(Color.parseColor("#9FB0CC"))
+  78:             gravity = Gravity.CENTER
+  79:             setPadding(0, dp(6), 0, dp(4))
+  80:         }
+  81: 
+  82:         stemView = TextView(this).apply {
+  83:             textSize = 26f
+  84:             setTypeface(typeface, Typeface.BOLD)
+  85:             setTextColor(Color.WHITE)
+  86:             setPadding(0, dp(16), 0, dp(16))
+  87:         }
+  88: 
+  89:         optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+  90: 
+  91:         feedbackView = TextView(this).apply {
+  92:             textSize = 18f
+  93:             setTextColor(Color.parseColor("#FF5B5B"))
+  94:             setPadding(0, dp(16), 0, dp(8))
+  95:         }
+  96: 
+  97:         col.addView(title)
+  98:         col.addView(progressView)
+  99:         col.addView(stemView)
+ 100:         col.addView(optionsBox)
+ 101:         col.addView(feedbackView)
+ 102:         root.addView(col)
+ 103:         setContentView(root)
+ 104:         updateProgress()
+ 105:     }
+ 106: 
+ 107:     private fun updateProgress() {
+ 108:         progressView.text = "已连续答对 $correctCount / $requiredStreak 题"
+ 109:     }
+ 110: 
+ 111:     private fun showNextQuestion() {
+ 112:         val qs = QuizStore.questions(this)
+ 113:         if (qs.isEmpty()) {
+ 114:             Toast.makeText(this, "题库为空，请先导入题库", Toast.LENGTH_LONG).show()
+ 115:             finish()
+ 116:             return
+ 117:         }
+ 118:         val idx = QuizStore.takeNext(this)
+ 119:         if (idx < 0 || idx >= qs.size) { finish(); return }
+ 120:         val q = qs[idx]
+ 121:         current = q
+ 122:         render(q)
+ 123:     }
+ 124: 
+ 125:     private fun render(q: Question) {
+ 126:         stemView.text = if (q.isJudge) "【判断题】${q.stem}" else "【单选题】${q.stem}"
+ 127:         feedbackView.text = ""
+ 128:         updateProgress()
+ 129:         optionsBox.removeAllViews()
+ 130: 
+ 131:         if (q.isJudge) {
+ 132:             // q.correct==1 表示答案为“正确”，==0 表示答案为“错误”
+ 133:             optionsBox.addView(makeOptionButton("正确", q.correct == 1, q))
+ 134:             optionsBox.addView(makeOptionButton("错误", q.correct == 0, q))
+ 135:         } else {
+ 136:             // 选项连内容一起随机打乱，正确答案跟随其文本移动
+ 137:             val items = ArrayList<Pair<String, Int>>()
+ 138:             for (i in q.options.indices) items.add(q.options[i] to i) // (文本, 原下标)
+ 139:             items.shuffle(Random.Default)
+ 140:             items.forEachIndexed { pos, pair ->
+ 141:                 val letter = ('A' + pos)
+ 142:                 val isCorrect = (pair.second == q.correct)
+ 143:                 optionsBox.addView(
+ 144:                     makeOptionButton("$letter. ${pair.first}", isCorrect, q)
+ 145:                 )
+ 146:             }
+ 147:         }
+ 148:     }
+ 149: 
+ 150:     private fun makeOptionButton(label: String, isCorrect: Boolean, q: Question): Button {
+ 151:         val b = Button(this).apply {
+ 152:             text = label
+ 153:             textSize = 20f
+ 154:             isAllCaps = false
+ 155:             setPadding(dp(16), dp(14), dp(16), dp(14))
+ 156:             layoutParams = LinearLayout.LayoutParams(
+ 157:                 LinearLayout.LayoutParams.MATCH_PARENT,
+ 158:                 LinearLayout.LayoutParams.WRAP_CONTENT
+ 159:             ).apply { bottomMargin = dp(10) }
+ 160:             setBackgroundColor(Color.parseColor("#16243B"))
+ 161:             setTextColor(Color.WHITE)
+ 162:         }
+ 163:         b.setOnClickListener {
+ 164:             if (isCorrect) {
+ 165:                 correctCount++
+ 166:                 updateProgress()
+ 167:                 if (correctCount >= requiredStreak) {
+ 168:                     // 达成连对数：放行 + 重新计时
+ 169:                     feedbackView.setTextColor(Color.parseColor("#2BB673"))
+ 170:                     feedbackView.text = "✅ 连对 ${requiredStreak} 题，继续看吧！"
+ 171:                     LockService.scheduleNext(this)
+ 172:                     Handler(Looper.getMainLooper()).postDelayed({ finish() }, 800)
+ 173:                 } else {
+ 174:                     // 还需继续连对：追加下一道新题
+ 175:                     feedbackView.setTextColor(Color.parseColor("#2BB673"))
+ 176:                     feedbackView.text = "✅ 答对了！再答对 ${requiredStreak - correctCount} 题即可解锁"
+ 177:                     showNextQuestion()
+ 178:                 }
+ 179:             } else {
+ 180:                 // 答错：连对清零，追加一道新题，仍锁屏
+ 181:                 correctCount = 0
+ 182:                 updateProgress()
+ 183:                 feedbackView.setTextColor(Color.parseColor("#FF5B5B"))
+ 184:                 val tip = if (q.analysis.isNotBlank())
+ 185:                     "❌ 答错了，计数清零。${q.analysis}  再来一题"
+ 186:                 else "❌ 答错了，计数清零，再来一题"
+ 187:                 feedbackView.text = tip
+ 188:                 showNextQuestion()
+ 189:             }
+ 190:         }
+ 191:         return b
+ 192:     }
+ 193: 
+ 194:     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+ 195:         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_HOME) return true
+ 196:         return super.onKeyDown(keyCode, event)
+ 197:     }
+ 198: 
+ 199:     override fun onBackPressed() { /* 禁用 */ }
+ 200: 

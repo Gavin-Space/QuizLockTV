@@ -1,0 +1,53 @@
+   1: package com.huiyang.quizlocktv
+   2: 
+   3: import org.json.JSONArray
+   4: import org.json.JSONObject
+   5: 
+   6: /**
+   7:  * 一道题。
+   8:  * type = "single"(单选) 或 "judge"(判断)
+   9:  * correct: single=正确选项下标(0基)；judge=0表示错误/false, 1表示正确/true
+  10:  */
+  11: data class Question(
+  12:     val type: String,
+  13:     val stem: String,
+  14:     val options: List<String>,   // 判断题为空列表
+  15:     val correct: Int,
+  16:     val analysis: String
+  17: ) {
+  18:     val isJudge get() = type == "judge"
+  19: }
+  20: 
+  21: object QuizParser {
+  22:     /** 解析题库 JSON，返回题目列表；格式错误时抛 IllegalArgumentException */
+  23:     fun parse(text: String): List<Question> {
+  24:         val root = JSONObject(text.trim())
+  25:         val arr = root.optJSONArray("questions")
+  26:             ?: throw IllegalArgumentException("缺少 questions 数组")
+  27:         val list = ArrayList<Question>()
+  28:         for (i in 0 until arr.length()) {
+  29:             val o = arr.getJSONObject(i)
+  30:             val type = o.optString("type")
+  31:             val stem = o.optString("stem")
+  32:             if (stem.isBlank()) continue
+  33:             when (type) {
+  34:                 "single" -> {
+  35:                     val opts = ArrayList<String>()
+  36:                     val oa = o.optJSONArray("options") ?: JSONArray()
+  37:                     for (k in 0 until oa.length()) opts.add(oa.getString(k))
+  38:                     if (opts.isEmpty()) continue
+  39:                     val ans = o.optInt("answer", -1)
+  40:                     if (ans < 0 || ans >= opts.size) continue
+  41:                     list.add(Question(type, stem, opts, ans, o.optString("analysis")))
+  42:                 }
+  43:                 "judge" -> {
+  44:                     val ans = if (o.optBoolean("answer", false)) 1 else 0
+  45:                     list.add(Question(type, stem, emptyList(), ans, o.optString("analysis")))
+  46:                 }
+  47:                 else -> { /* 跳过未知题型 */ }
+  48:             }
+  49:         }
+  50:         if (list.isEmpty()) throw IllegalArgumentException("没有解析到任何有效题目，请检查 JSON 格式")
+  51:         return list
+  52:     }
+  53: }

@@ -1,0 +1,90 @@
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import kotlin.random.Random
+
+/**
+ * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+ * 防乱点两道防线：
+ *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+ *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+ * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+ */
+class QuizLockActivity : Activity() {
+
+    companion object {
+        const val EXTRA_FIRST = "first"
+    }
+
+    private lateinit var stemView: TextView
+    private lateinit var feedbackView: TextView
+    private lateinit var progressView: TextView
+    private lateinit var optionsBox: LinearLayout
+
+    private var requiredStreak = 3
+    private var correctCount = 0
+    private var current: Question? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SECURE or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
+        requiredStreak = QuizStore.getStreak(this)
+        correctCount = 0
+        buildLayout()
+        showNextQuestion()
+    }
+
+    private fun buildLayout() {
+        val root = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#0B1220"))
+            isFillViewport = true
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val title = TextView(this).apply {
+            text = "🔒 答题解锁看电视（需连对 ${requiredStreak} 题）"
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#2BB673"))
+            gravity = Gravity.CENTER
+        }
+
+        progressView = TextView(this).apply {
+            textSize = 18f
+            setTextColor(Color.parseColor("#9FB0CC"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(4))
+        }
+
+        stemView = TextView(this).apply {
+            textSize = 26f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(0, dp(16), 0, dp(16))
+        }
+
+        optionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+

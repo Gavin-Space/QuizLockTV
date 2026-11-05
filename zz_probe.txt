@@ -1,0 +1,15 @@
+
+    Directory: D:\wps灵犀claw文件\20261104-16-04-15-481\QuizLockTV\app\src\main\java\com\huiyang\quizlocktv
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           2026/11/4    17:37            510 AlarmReceiver.kt
+-a---           2026/11/4    17:37           1019 BootReceiver.kt
+-a---           2026/11/4    18:34           7095 ControlServer.kt
+-a---           2026/11/4    18:34           3359 LockService.kt
+-a---           2026/11/5     1:55           8985 MainActivity.kt
+-a---           2026/11/4    18:34            855 NetworkInfo.kt
+-a---           2026/11/4    17:36           2007 Question.kt
+-a---           2026/11/5     7:10           7502 QuizLockActivity.kt
+-a---           2026/11/4    18:23           3065 QuizStore.kt
+-a---           2026/11/4    17:37           2142 QuizSync.kt

@@ -1,0 +1,17 @@
+   1: package com.huiyang.quizlocktv
+   2: 
+   3: import android.content.BroadcastReceiver
+   4: import android.content.Context
+   5: import android.content.Intent
+   6: 
+   7: /**
+   8:  * 每 N 分钟闹钟触发：拉起全屏锁屏出题页。
+   9:  */
+  10: class AlarmReceiver : BroadcastReceiver() {
+  11:     override fun onReceive(ctx: Context, intent: Intent) {
+  12:         val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+  13:             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+  14:         }
+  15:         try { ctx.startActivity(lock) } catch (e: Exception) {}
+  16:     }
+  17: }

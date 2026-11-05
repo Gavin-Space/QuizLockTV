@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>答题锁 TV · 手机控制台</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#0B1220;color:#E6EFFF;padding:16px;padding-bottom:40px}
+  h1{font-size:19px;color:#2BB673;margin-bottom:4px}
+  .sub{font-size:12px;color:#9FB0CC;margin-bottom:16px}
+  .card{background:#16243B;border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:15px;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .stat{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:#9FB0CC}
+  .stat b{color:#2BB673;font-size:17px}
+  textarea{width:100%;height:140px;background:#0B1220;color:#E6EFFF;border:1px solid #2a3a55;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;resize:vertical}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  .stepper{display:flex;align-items:center;gap:10px;background:#0B1220;border-radius:10px;padding:6px 12px}
+  .stepper button{width:34px;height:34px;font-size:20px;border:none;border-radius:8px;background:#2a3a55;color:#fff}
+  .stepper span{min-width:34px;text-align:center;font-size:18px;color:#fff;font-weight:bold}
+  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:16px;color:#fff;background:#0F8A4F;margin-top:8px;font-weight:bold}
+  .btn.blue{background:#1f6feb}
+  .btn:active{opacity:.8}
+  .msg{font-size:13px;margin-top:8px;min-height:18px}
+  .msg.ok{color:#2BB673}.msg.err{color:#FF5B5B}
+  .tip{font-size:11px;color:#6B7A93;margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+  <h1>🔒 答题锁 TV · 手机控制台</h1>
+  <div class="sub" id="ipInfo">连接到电视…</div>
+
+  <div class="card">
+    <h2>📊 当前状态</h2>
+    <div class="stat" id="status">加载中…</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn blue" style="margin-top:0" onclick="popupNow()">⚡ 立即弹一道题锁屏</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>⏱ 弹窗间隔（分钟）</h2>
+    <div class="stepper">
+      <button onclick="step('interval',-1)">−</button>
+      <span id="intervalVal">10</span>
+      <button onclick="step('interval',1)">＋</button>
+    </div>
+    <h2 style="margin-top:16px">✅ 需连续答对几题解锁</h2>
+    <div class="stepper">
+      <button onclick="step('streak',-1)">−</button>
+      <span id="streakVal">3</span>
+      <button onclick="step('streak',1)">＋</button>
+    </div>
+    <div class="tip">调大"连对题数"更难靠乱点蒙混过关。</div>
+    <button class="btn" onclick="saveConfig()">保存配置到电视</button>
+    <div class="msg" id="cfgMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>📥 更新题库（粘贴 AI 生成的 JSON）</h2>
+    <textarea id="bankInput" placeholder='把 WorkBuddy/AI 生成的题库 JSON 粘贴到这里，格式：
+{"questions":[
+ {"type":"single","stem":"题干","options":["A","B","C","D"],"answer":0,"analysis":"解析"},
+ {"type":"judge","stem":"题干","answer":true,"analysis":"解析"}
+]}'></textarea>
+    <button class="btn" onclick="pushBank()">📤 立即推送到电视（覆盖旧题库）</button>
+    <div class="msg" id="bankMsg"></div>
+    <div class="tip">推送后电视端会重新解析入库，下一次弹窗即用新题。格式有误会提示失败、不会破坏原题库。</div>
+  </div>
+
+<script>
+let cur = {interval:10, streak:3};
+const H = {}; // headers
+
+function refresh(){
+  fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(d=>{
+    cur.interval=d.interval; cur.streak=d.streak;
+    document.getElementById('intervalVal').textContent=d.interval;
+    document.getElementById('streakVal').textContent=d.streak;
+    document.getElementById('status').innerHTML=
+      '<div>题库 <b>'+d.count+'</b> 题</div>'+
+      '<div>间隔 <b>'+d.interval+'</b> 分钟</div>'+
+      '<div>连对 <b>'+d.streak+'</b> 题</div>';
+    document.getElementById('ipInfo').textContent='已连接电视 '+d.ip+':'+d.port;
+  }).catch(e=>{
+    document.getElementById('ipInfo').textContent='连接失败，请确认手机与电视在同一WiFi';
+  });
+}
+
+function step(key, d){
+  const min = key==='interval'?1:1, max = key==='interval'?1440:10;
+  let v = parseInt(document.getElementById(key+'Val').textContent)+d;
+  v = Math.max(min, Math.min(max, v));
+  document.getElementById(key+'Val').textContent=v;
+  cur[key]=v;
+}
+
+function saveConfig(){
+  const body='interval='+cur.interval+'&streak='+cur.streak;
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body,cache:'no-store'})
+    .then(r=>r.json()).then(d=>{
+      msg('cfgMsg','✅ 已保存','ok'); refresh();
+    }).catch(e=>msg('cfgMsg','❌ 失败:'+e,'err'));
+}
+
+function popupNow(){
+  fetch('/api/popup',{method:'POST',cache:'no-store'})
+    .then(()=>msg('cfgMsg','⚡ 已向电视发送弹窗','ok'))
+    .catch(e=>msg('cfgMsg','❌ 弹窗失败:'+e,'err'));
+}
+
+function pushBank(){
+  const t=document.getElementById('bankInput').value.trim();
+  if(!t){msg('bankMsg','请先粘贴内容','err');return;}
+  fetch('/api/bank',{method:'POST',headers:{'Content-Type':'application/json'},body:t,cache:'no-store'})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){msg('bankMsg','✅ 推送成功，电视已入库 '+d.count+' 题','ok');document.getElementById('bankInput').value='';refresh();}
+      else msg('bankMsg','❌ '+d.msg,'err');
+    }).catch(e=>msg('bankMsg','❌ 失败:'+e,'err'));
+}
+
+function msg(id,t,c){const el=document.getElementById(id);el.textContent=t;el.className='msg '+c;setTimeout(()=>{if(el.textContent===t)el.textContent='';},5000);}
+
+refresh();
+setInterval(refresh, 8000);
+</script>
+</body>
+</html>
+

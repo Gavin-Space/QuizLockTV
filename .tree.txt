@@ -1,0 +1,17 @@
+app\src\main\AndroidManifest.xml  2810
+app\src\main\assets\console.html  5952
+app\src\main\java\com\huiyang\quizlocktv\AlarmReceiver.kt  510
+app\src\main\java\com\huiyang\quizlocktv\BootReceiver.kt  1019
+app\src\main\java\com\huiyang\quizlocktv\ControlServer.kt  7095
+app\src\main\java\com\huiyang\quizlocktv\LockService.kt  3359
+app\src\main\java\com\huiyang\quizlocktv\MainActivity.kt  8985
+app\src\main\java\com\huiyang\quizlocktv\MainActivity.kt.bak  8985
+app\src\main\java\com\huiyang\quizlocktv\NetworkInfo.kt  855
+app\src\main\java\com\huiyang\quizlocktv\Question.kt  2007
+app\src\main\java\com\huiyang\quizlocktv\QuizLockActivity.kt  7500
+app\src\main\java\com\huiyang\quizlocktv\QuizStore.kt  3065
+app\src\main\java\com\huiyang\quizlocktv\QuizSync.kt  2142
+app\src\main\res\drawable\ic_launcher.xml  404
+app\src\main\res\values\colors.xml  348
+app\src\main\res\values\strings.xml  75
+app\src\main\res\values\themes.xml  758

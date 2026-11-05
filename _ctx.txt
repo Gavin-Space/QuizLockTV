@@ -1,0 +1,364 @@
+##### AlarmReceiver.kt (0.5 KB)
+package com.huiyang.quizlocktv
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+
+/**
+ * 每 N 分钟闹钟触发：拉起全屏锁屏出题页。
+ */
+class AlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { ctx.startActivity(lock) } catch (e: Exception) {}
+    }
+}
+##### BootReceiver.kt (1 KB)
+package com.huiyang.quizlocktv
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+
+/**
+ * 开机完成：启动前台服务（负责安排每 N 分钟弹窗），并立即弹"开机首题"。
+ */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val svc = Intent(ctx, LockService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(svc)
+            } else {
+                ctx.startService(svc)
+            }
+        } catch (e: Exception) { /* 个别 ROM 限制，忽略 */ }
+
+        // 开机先做一道题：从后台拉起锁屏页
+        val lock = Intent(ctx, QuizLockActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(QuizLockActivity.EXTRA_FIRST, true)
+        }
+        try { ctx.startActivity(lock) } catch (e: Exception) {}
+    }
+}
+##### ControlServer.kt (6.9 KB)
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.content.Intent
+import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import kotlin.concurrent.thread
+
+/**
+ * 内置局域网 HTTP 控制服务器：让同一 WiFi 下的手机/电脑用浏览器控制电视。
+ * 路由：
+ *   GET  /             -> 手机控制台网页(assets/console.html)
+ *   GET  /api/status   -> 当前题库数/间隔/连对/IP 的 JSON
+ *   POST /api/bank     -> body 为题库 JSON，校验后整库替换
+ *   POST /api/config   -> body: interval=10&streak=3，改弹窗间隔与连对数
+ *   POST /api/popup    -> 立即拉起全屏锁屏出题
+ * 纯 JDK ServerSocket 实现，不依赖第三方库，targetSdk30 无 cleartext 限制问题。
+ */
+class ControlServer(private val ctx: Context, private val port: Int = NetworkInfo.PORT) {
+
+    @Volatile private var running = false
+    private var server: ServerSocket? = null
+
+    fun start() {
+        if (running) return
+        running = true
+        thread(isDaemon = true) {
+##### LockService.kt (3.3 KB)
+package com.huiyang.quizlocktv
+
+import android.app.AlarmManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+
+/**
+ * 前台常驻服务：保证进程不被电视待机清理，并提供"答对解锁后重新计时 N 分钟"的闹钟调度。
+ * 计时起点 = 上一次答对解锁的时刻，符合"每满 N 分钟弹一题"。
+ */
+class LockService : Service() {
+
+    private var controlServer: ControlServer? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startAsForeground()
+        // 启动内置局域网控制服务器：同一 WiFi 下手机/电脑可远程放题与弹窗
+        controlServer = ControlServer(applicationContext).also { it.start() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { controlServer?.stop() }
+        controlServer = null
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+##### MainActivity.kt (8.8 KB)
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+/**
+ * 管理主页 = 题库入口。
+ * 入口A：粘贴导入（把 AI 生成的题库 JSON 粘进来）。
+ * 入口B：URL 自动同步（填一个公开 .json 地址，电视定时/手动拉取更新）。
+ * 另：设置出题间隔、测试锁屏。
+ */
+class MainActivity : Activity() {
+
+    private lateinit var statusView: TextView
+    private lateinit var intervalLabel: TextView
+    private lateinit var streakLabel: TextView
+    private lateinit var pasteInput: EditText
+    private lateinit var urlInput: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        buildLayout()
+        refreshStatus()
+        startServiceAndSchedule()
+##### NetworkInfo.kt (0.8 KB)
+package com.huiyang.quizlocktv
+
+import java.net.NetworkInterface
+
+/** 获取电视在局域网里的 IPv4 地址（手机据此访问控制台）。 */
+object NetworkInfo {
+    const val PORT = 8770
+
+    fun localIp(): String {
+        try {
+            val en = NetworkInterface.getNetworkInterfaces()
+            for (intf in en) {
+                if (!intf.isUp || intf.isLoopback) continue
+                for (addr in intf.inetAddresses) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") != true) {
+                        return addr.hostAddress ?: ""
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "未知"
+    }
+
+    /** 手机浏览器要访问的完整地址，如 http://192.168.1.50:8770 */
+    fun consoleUrl(): String = "http://${localIp()}:$PORT"
+}
+##### Question.kt (2 KB)
+package com.huiyang.quizlocktv
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * 一道题。
+ * type = "single"(单选) 或 "judge"(判断)
+ * correct: single=正确选项下标(0基)；judge=0表示错误/false, 1表示正确/true
+ */
+data class Question(
+    val type: String,
+    val stem: String,
+    val options: List<String>,   // 判断题为空列表
+    val correct: Int,
+    val analysis: String
+) {
+    val isJudge get() = type == "judge"
+}
+
+object QuizParser {
+    /** 解析题库 JSON，返回题目列表；格式错误时抛 IllegalArgumentException */
+    fun parse(text: String): List<Question> {
+        val root = JSONObject(text.trim())
+        val arr = root.optJSONArray("questions")
+            ?: throw IllegalArgumentException("缺少 questions 数组")
+        val list = ArrayList<Question>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val type = o.optString("type")
+            val stem = o.optString("stem")
+            if (stem.isBlank()) continue
+            when (type) {
+                "single" -> {
+                    val opts = ArrayList<String>()
+##### QuizLockActivity.kt (7.3 KB)
+package com.huiyang.quizlocktv
+
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import kotlin.random.Random
+
+/**
+ * 全屏锁屏出题页：遮住电视画面，必须连续答对才放行。
+ * 防乱点两道防线：
+ *  1) 需连续答对 requiredStreak 题才解锁，答错则计数清零重来；
+ *  2) 单选题选项每次随机打乱，杜绝"闭眼点第一个/固定A"。
+ * 仍保持规则：每次一题、答错追加一道新题直到答对、答对解锁继续看。
+ */
+class QuizLockActivity : Activity() {
+
+    companion object {
+        const val EXTRA_FIRST = "first"
+    }
+
+    private lateinit var stemView: TextView
+    private lateinit var feedbackView: TextView
+    private lateinit var progressView: TextView
+    private lateinit var optionsBox: LinearLayout
+##### QuizStore.kt (3 KB)
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.content.SharedPreferences
+
+/**
+ * 用 SharedPreferences 保存：题库原文、当前进度指针、出题间隔、同步地址、上次同步时间。
+ * 题库以 JSON 字符串整体存储，解析结果缓存到内存。
+ */
+object QuizStore {
+    private const val PREF = "quiz_lock_pref"
+    private const val KEY_RAW = "quiz_raw_json"        // 题库原文 JSON
+    private const val KEY_POINTER = "pointer"          // 当前出到第几题（循环推进）
+    private const val KEY_INTERVAL = "interval_min"    // 弹窗间隔(分钟)
+    private const val KEY_URL = "sync_url"             // 入口B：自动同步地址
+    private const val KEY_LAST_SYNC = "last_sync"      // 上次同步成功时间戳
+    private const val KEY_STREAK = "required_streak"   // 需连续答对几题才解锁（防乱点）
+
+    private var cache: List<Question>? = null
+
+    private fun sp(c: Context): SharedPreferences =
+        c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
+    // ---- 题库读写 ----
+    fun saveRaw(c: Context, rawJson: String) {
+        sp(c).edit().putString(KEY_RAW, rawJson).putInt(KEY_POINTER, 0).apply()
+        cache = null // 题库更新，重置缓存与进度
+    }
+
+    fun currentRaw(c: Context): String = sp(c).getString(KEY_RAW, "") ?: ""
+
+    fun questions(c: Context): List<Question> {
+        cache?.let { return it }
+        val raw = currentRaw(c)
+        val parsed = if (raw.isBlank()) emptyList() else
+##### QuizSync.kt (2.1 KB)
+package com.huiyang.quizlocktv
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import java.net.HttpURLConnection
+import java.net.URL
+
+/**
+ * 入口B：从用户填的 URL 拉取题库 JSON。fetchNow 内部自起后台线程，回调在主线程。
+ */
+object QuizSync {
+    interface Result {
+        fun onDone(ok: Boolean, msg: String)
+    }
+
+    /** 同步：拉取 URL，成功且能解析则替换本地题库。 */
+    fun fetchNow(ctx: Context, result: Result?) {
+        val url = QuizStore.getSyncUrl(ctx)
+        Thread {
+            if (url.isBlank()) {
+                post(result, false, "未设置同步地址")
+                return@Thread
+            }
+            try {
+                val text = httpGet(url)
+                if (text == null) {
+                    post(result, false, "无法访问地址（检查网络/链接是否公开可读）")
+                    return@Thread
+                }
+                // 先验证能解析成题库，再入库
+                QuizParser.parse(text)
+                QuizStore.saveRaw(ctx, text)
+                QuizStore.setLastSync(ctx, System.currentTimeMillis())
+                post(result, true, "同步成功，题库已更新")
+##### console.html
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>答题锁 TV · 手机控制台</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#0B1220;color:#E6EFFF;padding:16px;padding-bottom:40px}
+  h1{font-size:19px;color:#2BB673;margin-bottom:4px}
+  .sub{font-size:12px;color:#9FB0CC;margin-bottom:16px}
+  .card{background:#16243B;border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:15px;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .stat{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:#9FB0CC}
+  .stat b{color:#2BB673;font-size:17px}
+  textarea{width:100%;height:140px;background:#0B1220;color:#E6EFFF;border:1px solid #2a3a55;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;resize:vertical}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  .stepper{display:flex;align-items:center;gap:10px;background:#0B1220;border-radius:10px;padding:6px 12px}
+  .stepper button{width:34px;height:34px;font-size:20px;border:none;border-radius:8px;background:#2a3a55;color:#fff}
+  .stepper span{min-width:34px;text-align:center;font-size:18px;color:#fff;font-weight:bold}
+  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:16px;color:#fff;background:#0F8A4F;margin-top:8px;font-weight:bold}
+  .btn.blue{background:#1f6feb}
+  .btn:active{opacity:.8}
+  .msg{font-size:13px;margin-top:8px;min-height:18px}
+  .msg.ok{color:#2BB673}.msg.err{color:#FF5B5B}
+  .tip{font-size:11px;color:#6B7A93;margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+  <h1>🔒 答题锁 TV · 手机控制台</h1>
+  <div class="sub" id="ipInfo">连接到电视…</div>
+
+  <div class="card">
+    <h2>📊 当前状态</h2>
+    <div class="stat" id="status">加载中…</div>
+##### resources

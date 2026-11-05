@@ -1,0 +1,4 @@
+drawable\ic_launcher.xml
+values\colors.xml
+values\strings.xml
+values\themes.xml
